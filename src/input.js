@@ -28,8 +28,6 @@ export class Input {
     this.latched = new Set();
     this.listeners = [];
     this.enabled = true;
-    this.wheel = 0; // v1.2 B5: the mouse wheel switches weapons
-    window.addEventListener('wheel', (e) => { if (e.deltaY) this.wheel = Math.sign(e.deltaY); }, { passive: true });
     window.addEventListener('keydown', (e) => this.onDown(e));
     window.addEventListener('keyup', (e) => { this.down.delete(e.code); });
     window.addEventListener('blur', () => { this.down.clear(); this.latched.clear(); });
@@ -55,7 +53,7 @@ export class Input {
   // Build one tick of input for the simulation
   sample() {
     const inp = emptyInput();
-    if (!this.enabled) { this.latched.clear(); this.wheel = 0; return inp; }
+    if (!this.enabled) { this.latched.clear(); return inp; }
     inp.up = this.held('up'); inp.down = this.held('down'); inp.left = this.held('left'); inp.right = this.held('right');
     inp.attack = this.held('attack') || this.latched.has(this.keys.attack);
     inp.shift = this.held('lock');
@@ -65,7 +63,6 @@ export class Input {
     inp.reload = this.pressed('reload'); inp.throw = this.pressed('throw'); inp.shove = this.pressed('shove');
     inp.trick = this.pressed('trick'); inp.dog = this.held('dog');
     for (let i = 1; i <= 4; i++) if (this.latched.has('Digit' + i)) inp.slot = i;
-    inp.wheel = this.wheel; this.wheel = 0;
     this.latched.clear();
     return inp;
   }

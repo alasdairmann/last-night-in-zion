@@ -98,7 +98,8 @@ export class Game {
     this.lastBarkT = -99; this.lastBark = {};
     this.stats = { kills: 0, meleeKills: 0, heads: 0, crits: 0, earned: 0, spent: 0, doors: 0, downs: 0, weaponKills: {}, bestStreak: 0, deathZone: 1, deathWeapon: '' };
     this.god = !!this.attract; this.idSeq = 1;
-    this.infinite = !!this.opts.infiniteScrap; // v1.2 B20: God mode setting (unlimited Scrap)
+    this.infinite = !!this.opts.infiniteScrap; // v1.2 B20: God mode setting (unlimited Scrap, health, ammo)
+    this.godUsed = this.infinite; // sticky: any run that had God mode on doesn't count for records
     this.p = this.makePlayer();
     this.prompt = null;
     this.hold = { key: null, t: 0, failed: false, done: false }; this.holdPrev = false;
@@ -251,6 +252,7 @@ export class Game {
     if (this.hitstop > 0) { this.hitstop -= DT; return; }
     this.t += DT; this.tick++;
     if (this.state === 'escaped') { this.updateEscape(); return; }
+    if (this.infinite) this.godRefill();
     this.updateFlow();
     this.updateGrab(inp);
     if (this.cellar) this.updateCellar(inp);
@@ -340,15 +342,7 @@ export class Game {
     // weapon selection
     if (!p.downed && !inp.consumedQE && !(this.prompt && this.prompt.kind === 'workshop' && this.workshop.state === 'ready' && this.workshop.options)) {
       if (inp.slot) this.selectSlot(inp.slot - 1);
-      // v1.2 B5: Q/E only cycle interaction options. The wheel (or 1-4) switches weapons
-      if (inp.wheel) {
-        const order = [0, 1, 2, 3].filter((i) => p.slots[i]);
-        if (order.length > 1) {
-          let k = order.indexOf(p.cur); if (k < 0) k = 0;
-          k = (k + (inp.wheel > 0 ? 1 : -1) + order.length) % order.length;
-          this.selectSlot(order[k]);
-        }
-      }
+      // Q/E only cycle interaction options; 1-4 switch weapons (the mouse wheel no longer does)
     }
     this.updateWeapon(inp);
 
@@ -819,9 +813,23 @@ export class Game {
   // v1.4 D4: a kill counts as fire/explosive if the enemy was ever burned or blasted (or this blow is fire/explosive)
   fireKill(e, src) { return src.kind === 'fire' || src.kind === 'explosion' || !!e.markedFireExplosive; }
 
+  setGod(on) { this.infinite = !!on; if (on) this.godUsed = true; }
+  godRefill() {
+    const p = this.p; if (p.dead) return;
+    if (!p.downed) p.hp = p.maxHp;
+    this.parts = T.parts.max; // unlimited Parts too: every cost is payable, theft takes nothing that sticks
+    if (p.throwable.id) p.throwable.count = Math.max(p.throwable.count, THROWS[p.throwable.id].max);
+    if (this.trick.id) this.trick.charge = this.trickNeed();
+    for (const w of [...p.slots, p.lastChance]) {
+      if (!w) continue;
+      if (w.id === 'blowtorch') w.mag = T.blowtorch.fuel;
+      else if (w.kind === 'gun') { const st = this.gunStats(w); w.mag = Math.max(w.mag, st.mag - 1); w.reserve = st.reserve; }
+      else if (Number.isFinite(w.dur)) w.dur = this.maxDur(w);
+    }
+  }
   hurtPlayer(dmg, src = {}) {
     const p = this.p;
-    if (p.dead || p.downed || this.god) return false;
+    if (p.dead || p.downed || this.god || this.infinite) return false;
     if (p.invuln > 0) return false;
     if (!src.dot && p.iframes > 0) return false;
     if (p.repairing && this.t - p.plankStart < T.barricade.grace && !src.dot) return false;
@@ -1167,7 +1175,7 @@ export class Game {
       info = this.describe(best);
     }
     if (best.kind === 'workshop' && info.cost && this.hasRole('mechanic')) info.cost = Math.round(info.cost * 0.8 / 10) * 10;
-    const partsOk = !info.partsCost || this.parts >= info.partsCost;
+    const partsOk = !info.partsCost || this.infinite || this.parts >= info.partsCost;
     this.prompt = { ...info, x: best.x, y: best.y, kind: best.kind, progress: 0, open: !!inp.interact, afford: (!info.cost || this.canAfford(info.cost)) && partsOk, choices: best.kind === 'workshop' && this.workshop.state === 'ready' ? this.workshop.options : null, choice: this.workshop.choice };
     if (!inp.interact || info.disabled) { this.hold.key = null; this.hold.done = false; this.hold.failed = false; return; }
     const key = best.kind + ':' + (best.obj.id ?? best.obj.idx ?? 0) + (info.menuN ? ':' + info.menuIdx : '');
@@ -1207,7 +1215,7 @@ export class Game {
     if (this.hold.t >= info.holdTime) {
       this.hold.done = true;
       if (info.cost) this.spend(info.cost);
-      if (info.partsCost) { this.parts -= info.partsCost; this.emit('purchase', { amt: 0 }); }
+      if (info.partsCost) { if (!this.infinite) this.parts -= info.partsCost; this.emit('purchase', { amt: 0 }); }
       info.action();
       if (info.repeat) { this.hold.done = false; this.hold.t = 0; } // v1.5 B1/H1: hold to keep going
     }

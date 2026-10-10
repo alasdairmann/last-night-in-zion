@@ -2,7 +2,7 @@
 import { ACTION_NAMES, keyLabel } from '../input.js';
 import { ZONE_NAMES, TRICKS, TAPES, WEATHER, ITEMS, ITEM_USES, THROWS, GUNS, CONDITIONS } from '../data.js';
 import { weaponName } from '../sim/game.js';
-import { pediaTabs, mapHtml } from './enochpedia.js';
+import { pediaTabs, mapHtml, wirePedia } from './enochpedia.js';
 import { T } from '../tuning.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -54,6 +54,7 @@ export class UI {
     this.root.querySelectorAll('[data-st]').forEach((el) => el.addEventListener('click', () => { s.smallTab = +el.dataset.st; this.render(); }));
     this.wireNotes();
     this.root.querySelectorAll('.tab').forEach((el) => el.addEventListener('click', () => { s.tab = +el.dataset.t; this.render(); }));
+    if (s.after) s.after(this.root);
     this.root.querySelectorAll('.item').forEach((el) => {
       el.addEventListener('mouseenter', () => { this.sel = +el.dataset.i; this.highlight(); });
       el.addEventListener('click', () => { this.sel = +el.dataset.i; this.activate(0); });
@@ -69,6 +70,8 @@ export class UI {
       if (e.code !== 'Escape') { this.capture.set(e.code); this.store.save(); }
       this.capture = null; this.render(); return true;
     }
+    // typing in a text box (the Zionpedia search): only Escape leaves it
+    if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Escape') { e.target.blur(); e.preventDefault(); } return true; }
     const items = this.items();
     const c = e.code;
     if (e.repeat && (c === 'Enter' || c === 'Space' || c === 'KeyF')) { e.preventDefault(); return true; }
@@ -125,11 +128,12 @@ export class UI {
   howTo() {
     const k = this.store.settings.keys, L = keyLabel;
     const keys = [
-      ['Arrow keys', 'Move (you face the way you move)'],
+      ['\u2190 \u2191 \u2193 \u2192', 'Move (you face the way you move)'],
       [L(k.attack), 'Swing or fire in the direction you face'],
       [`${L(k.lock)} (hold)`, 'Lock facing: back away while attacking'],
       [`${L(k.interact)} (hold)`, 'Buy, repair, open, start the generator'],
-      [`${L(k.prev)} / ${L(k.next)}, 1-4`, 'Switch weapon'],
+      ['1-4', 'Switch weapon'],
+      [`${L(k.prev)} / ${L(k.next)}`, 'Flip options at benches and boards'],
       [L(k.reload), 'Reload'], [L(k.throw), 'Throw a brick (or whatever is in your pocket)'],
       [L(k.shove), 'Shove: push them back, set up critical hits'],
       [`${L(k.map)} (hold)`, 'Town map'], [`${L(k.pause)} / P`, 'Pause'],
@@ -159,7 +163,7 @@ export class UI {
       { label: 'Scrap pop-ups', type: 'toggle', options: ['on', 'off'], get: () => (S.popups ? 'on' : 'off'), set: (v) => (S.popups = v === 'on') },
       { label: 'Damage numbers', type: 'toggle', options: ['on', 'off'], get: () => (S.damageNumbers !== false ? 'on' : 'off'), set: (v) => (S.damageNumbers = v === 'on') },
       { label: 'Tutorial prompts', type: 'toggle', options: ['on', 'off'], get: () => (S.tutorial ? 'on' : 'off'), set: (v) => { S.tutorial = v === 'on'; if (S.tutorial) this.store.tut = {}; } },
-      { label: 'God mode (unlimited Scrap)', type: 'toggle', options: ['off', 'on'], get: () => (S.godMode ? 'on' : 'off'), set: (v) => { S.godMode = v === 'on'; } },
+      { label: 'God mode (unlimited everything)', type: 'toggle', options: ['off', 'on'], get: () => (S.godMode ? 'on' : 'off'), set: (v) => { S.godMode = v === 'on'; } },
       { label: 'Colour-blind assist', type: 'toggle', options: ['off', 'on'], get: () => (S.colourBlind ? 'on' : 'off'), set: (v) => { S.colourBlind = v === 'on'; document.body.classList.toggle('cb', S.colourBlind); } },
       { label: 'Fullscreen', action: () => this.hooks.fullscreen() },
       { label: 'Controls', action: () => this.controls() },
@@ -197,7 +201,11 @@ export class UI {
     this.push({ title: 'Quit this run?', html: '<p>Anything since your last save is lost. Save first from the pause menu if you want to come back.</p>', items: [{ label: 'Keep fighting', primary: true, action: () => this.pop() }, { label: 'Quit to menu', danger: true, action: () => this.hooks.quit() }] });
   }
   pedia() {
-    this.push({ wide: true, title: 'Zionpedia', tabs: () => pediaTabs(this.store.settings.keys), tab: 0, items: [{ label: 'Back', action: () => this.pop() }], foot: 'Q / E or &larr; &rarr; change tab &middot; W / S scroll &middot; ESC back' });
+    const keys = this.store.settings.keys;
+    const scr = { wide: true, cls: 'pediaui', title: 'Zionpedia', tabs: () => pediaTabs(keys), tab: 0, items: [{ label: 'Back', action: () => this.pop() }],
+      after: (root) => wirePedia(root, scr, () => this.render(), keys), onKey: (e) => { if (e.code === 'Slash') scr.focusSearch?.(); },
+      foot: 'Click a card for details &middot; / search &middot; Q / E or &larr; &rarr; change tab &middot; W / S scroll &middot; ESC back' };
+    this.push(scr);
   }
   pickTrick(last) {
     const ids = Object.keys(TRICKS);
@@ -211,13 +219,14 @@ export class UI {
   notesHtml(limit = 200) {
     const notes = (this.hooks.notes?.() || []).slice(0, limit), f = Math.min(this.noteFocus || 0, Math.max(0, notes.length - 1)), pin = this.hooks.pinned?.();
     const ic = { danger: '!', objective: '★', radio: '≋', tip: '?', banner: '·' };
+    const lo = Math.max(0, Math.min(f - 2, notes.length - 5)), hi = Math.min(notes.length, lo + 5);
     const row = (n, i) => {
       const k = n.text.indexOf(': '), title = k > 0 ? n.text.slice(0, k) : n.text, body = k > 0 ? n.text.slice(k + 2) : '';
-      if (i !== f) return `<li class="note ${n.kind}" data-n="${i}"><span class="ic">${ic[n.kind] || '·'}</span><span class="tt">${esc(title)}</span><span class="n">W${n.wave}</span></li>`;
+      if (i !== f) return `<li class="note ${n.kind} d${Math.min(2, Math.abs(i - f))}" data-n="${i}"><span class="ic">${ic[n.kind] || '·'}</span><span class="tt">${esc(title)}</span><span class="n">W${n.wave}</span></li>`;
       const on = pin && n.pin && pin.x === n.pin.x && pin.y === n.pin.y;
       return `<li class="note open ${n.kind}" data-n="${i}"><div class="nh"><span class="ic">${ic[n.kind] || '·'}</span><b>${esc(title)}</b><span class="n">Wave ${n.wave}</span></div>${body ? `<p>${esc(body)}</p>` : ''}${n.code ? `<span class="code">${esc(n.code)}</span>` : ''}${n.pin ? `<button class="pinbtn" data-pin="${i}">${on ? 'Unpin from the map' : 'Pin on the map (M)'}</button>` : ''}</li>`;
     };
-    return `<h3>Notes</h3>${notes.length ? `<ol class="notes cards">${notes.map(row).join('')}</ol><p class="hint">&larr; &rarr; or the wheel to move &middot; M to pin</p>` : '<p>Nothing yet.</p>'}`;
+    return `<h3>Notes</h3>${notes.length ? `${lo > 0 ? `<p class="more">&uarr; ${lo} newer</p>` : ''}<ol class="notes cards">${notes.slice(lo, hi).map((n, j) => row(n, lo + j)).join('')}</ol>${hi < notes.length ? `<p class="more">&darr; ${notes.length - hi} older</p>` : ''}<p class="hint">${f + 1} / ${notes.length} &middot; &larr; &rarr; or wheel &middot; M pin</p>` : '<p>Nothing yet.</p>'}`;
   }
   wireNotes() {
     const list = this.root.querySelector('.notes.cards'); if (!list) return;
@@ -323,7 +332,7 @@ export class UI {
     this.show({
       cls: 'over', wide: true,
       title: `You fell on wave ${r}.`,
-      html: `${g.infinite ? '<p class="godflag">God mode was on: this run doesn\'t count for records.</p>' : ''}<p class="sub">You held Zion for ${Math.max(0, r - 1)} wave${r - 1 === 1 ? '' : 's'}.${newBest ? ' <b class="newbest">New best!</b>' : ''}</p>
+      html: `${g.godUsed ? '<p class="godflag">God mode was on: this run doesn\'t count for records.</p>' : ''}<p class="sub">You held Zion for ${Math.max(0, r - 1)} wave${r - 1 === 1 ? '' : 's'}.${newBest ? ' <b class="newbest">New best!</b>' : ''}</p>
       <p class="epitaph">${esc(epitaph)}</p>
       <table class="stats">${row('Kills', s.kills)}${row('Melee kills', `${pct}%`)}${row('Headshots / criticals', `${s.heads} / ${s.crits}`)}${row('Scrap earned', s.earned.toLocaleString('en-GB'))}${row('Scrap spent', s.spent.toLocaleString('en-GB'))}${row('Doors opened', s.doors)}${row('Most-used weapon', most ? esc(most[0]) : '-')}${row('Run time', `${mins}:${String(secs).padStart(2, '0')}`)}${row('Times downed', s.downs)}${row('Best streak', s.bestStreak)}</table>${score ? this.scoreHtml(score, bestScore) : ''}`,
       items: [

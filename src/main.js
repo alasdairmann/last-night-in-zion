@@ -91,7 +91,7 @@ function continueRun(raw = store.loadLatest()) {
   audio.init(); audio.startMusic(); audio.stopEngine(); audio.duck(false);
   try {
     const { game: g, meta } = restore(raw, { hitStop: S.hitStop });
-    game = g; renderer.setGame(game); hud.reset();
+    game = g; game.setGod(S.godMode); renderer.setGame(game); hud.reset();
     if (game.power) audio.play('power');
     runlog.start(game, { kind: 'continue', round: game.round });
     scene = 'play'; deathT = -1; acc = 0; runStart = performance.now() - (meta.time || 0) * 1000; inputLog = [];
@@ -99,8 +99,8 @@ function continueRun(raw = store.loadLatest()) {
   } catch (e) { console.error(e); store.clearRun(); store.clearAuto(); toMenu(); }
 }
 function openLog() { if (scene !== 'play' || deathT >= 0) return; scene = 'pause'; audio.duck(true); audio.setMood('pause'); ui.errandLog(game); }
-function pause() { if (scene !== 'play') return; runlog.note({ e: 'pause' }); runlog.flush(); scene = 'pause'; audio.duck(true); audio.setMood('pause'); ui.noteFocus = 0; ui.pause(!!store.loadRun()); }
-function resume() { scene = 'play'; audio.duck(false); audio.setMood(null); ui.hide(); last = performance.now(); input.down.clear(); }
+function pause() { if (scene !== 'play') return; runlog.note({ e: 'pause' }); runlog.flush(); scene = 'pause'; audio.duck(true); audio.setMood('pause'); ui.noteFocus = 0; ui.pause(); }
+function resume() { if (game) game.setGod(S.godMode); scene = 'play'; audio.duck(false); audio.setMood(null); ui.hide(); last = performance.now(); input.down.clear(); }
 
 // keys that aren't simulation input
 input.onKey((e) => {
@@ -208,9 +208,9 @@ screen.addEventListener('mousedown', (e) => { const r = screen.getBoundingClient
 function escaped() {
   scene = 'over'; escapeT = -1;
   const r = game.round; const R = store.rec;
-  if (!game.infinite) { R.escapes++; if (!R.bestEscapeRound || r < R.bestEscapeRound) R.bestEscapeRound = r;
+  if (!game.godUsed) { R.escapes++; if (!R.bestEscapeRound || r < R.bestEscapeRound) R.bestEscapeRound = r;
   if (r > store.best) store.best = r; }
-  const sc = game.runScore('escaped'), bs = !game.infinite && sc.total > (R.bestScore || 0);
+  const sc = game.runScore('escaped'), bs = !game.godUsed && sc.total > (R.bestScore || 0);
   if (bs) R.bestScore = sc.total;
   store.save();
   audio.setMood(null);
@@ -218,8 +218,8 @@ function escaped() {
 }
 function gameOver() {
   scene = 'over';
-  const r = game.round, newBest = !game.infinite && r > store.best;
-  const sc = game.runScore('death'), bs = !game.infinite && sc.total > (store.rec.bestScore || 0);
+  const r = game.round, newBest = !game.godUsed && r > store.best;
+  const sc = game.runScore('death'), bs = !game.godUsed && sc.total > (store.rec.bestScore || 0);
   if (bs) store.rec.bestScore = sc.total;
   if (newBest || bs) { if (newBest) store.best = r; store.save(); }
   ui.gameOver(game, newBest, runTime, sc, bs);

@@ -388,7 +388,8 @@ test('B5: Q/E never change the weapon slot', () => {
   const g = fresh(); quiet(g); const c0 = g.p.cur;
   for (let i = 0; i < 10; i++) { g.step(inp({ next: true })); g.step(inp({ prev: true })); g.step(inp({ next: true })); run(g, 30); }
   assert.equal(g.p.cur, c0);
-  g.step(inp({ wheel: 1 })); assert.notEqual(g.p.cur, c0);
+  g.step(inp({ wheel: 1 })); assert.equal(g.p.cur, c0, 'the mouse wheel no longer switches weapons');
+  const other = g.p.slots.findIndex((w, i) => w && i !== c0); g.step(inp({ slot: other + 1 })); assert.equal(g.p.cur, other);
 });
 test('v1.5 I2: a found melee weapon goes to the stash, never replacing yours; swap it at the bar', () => {
   const g = fresh(); quiet(g);

@@ -109,7 +109,7 @@ export class Hud {
       repair: `Hold ${keyLabel(k.interact)} to board the barricade: free, and it pays Scrap`,
       shove: `Press ${keyLabel(k.shove)} to shove them back`,
       buy: `Press and hold ${keyLabel(k.interact)} to buy with Scrap`,
-      swap: '1-4 or the mouse wheel to switch weapons',
+      swap: '1-4 to switch weapons',
       throw: `Press ${keyLabel(k.throw)} to throw a brick`,
       map: `Hold ${keyLabel(k.map)} for the town map`,
       trick: `Trick ready! Press ${keyLabel(k.trick)}`,
@@ -321,7 +321,7 @@ export class Hud {
         c.fillStyle = sel ? E.color : '#2a2620'; c.fillRect(cx - 1, cy - 1, cw + 2, 24);
         c.fillStyle = sel ? shadeHex(E.color, -0.55) : '#211b14'; c.fillRect(cx + 1, cy + 1, cw - 2, 20);
         if (sel) { c.globalAlpha = 0.3 + 0.3 * pulse; c.fillStyle = E.color; c.fillRect(cx + 1, cy + 1, cw - 2, 20); c.globalAlpha = 1; }
-        this.text(c, (sel ? '▶ ' : '') + E.name.toUpperCase(), cx + cw / 2, cy + 3, { size: 8, align: 'center', color: sel ? '#ffffff' : E.color });
+        this.text(c, E.name.toUpperCase(), cx + cw / 2, cy + 3, { size: 8, align: 'center', color: sel ? '#ffffff' : E.color });
         this.text(c, E.desc, cx + cw / 2, cy + 13, { size: 5, align: 'center', color: sel ? C.cream : C.khaki });
         this.text(c, i === 0 ? keyLabel(this.settings.keys.prev) : keyLabel(this.settings.keys.next), cx + (i === 0 ? -6 : cw + 6), cy + 7, { font: NUM, weight: '400', size: 6, align: 'center', color: sel ? E.color : C.khaki });
       });
