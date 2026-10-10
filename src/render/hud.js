@@ -905,7 +905,7 @@ export class Hud {
       this.mt.push({ x: rx, y, w: mw, h: mh, id: 'minimap' }); }
     // one buff chip: the soonest to run out, "+N" for the rest; tap for the list
     const buffs = this.buffRows(g);
-    if (buffs.length) {
+    if (buffs.length && rx - 84 >= x) { // narrow screens: the chip gives way rather than overlap
       const w = 78; rx -= w + 6;
       const [kk, t] = buffs[0], flash = t < 5 && Math.floor(this.time * 6) % 2;
       this.plaque(c, rx, y, w, h, kk === 'diamond' ? { danger: true } : {});

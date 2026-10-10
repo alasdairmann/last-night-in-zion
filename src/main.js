@@ -54,7 +54,9 @@ const touch = new TouchInput(document.getElementById('stage'), overlay, S, layou
 hud.onPause = () => pause();
 hud.ctxRect = () => touch.byId.interact;
 hud.tutPoint = (key) => touch.byId[{ shift: 'lock', repair: 'interact', buy: 'interact', shove: 'shove', throw: 'throw', trick: 'trick', dog: 'dog', swap: 'chip', map: 'minimap' }[key]];
-const mobileView = () => { const r = screen.getBoundingClientRect(), sv = touch.view(); return { ...sv, dpr: window.devicePixelRatio || 1, rect: { x: r.left, y: r.top, w: r.width, h: r.height }, cam: renderer.cam }; };
+// the game canvas rect only changes on resize; read it then, not every frame
+let canvasRect = null;
+const mobileView = () => { const sv = touch.view(); if (!canvasRect || canvasRect.W !== sv.W || canvasRect.H !== sv.H || canvasRect.s !== scale) { const r = screen.getBoundingClientRect(); canvasRect = { W: sv.W, H: sv.H, s: scale, x: r.left, y: r.top, w: r.width, h: r.height }; } return { ...sv, dpr: window.devicePixelRatio || 1, rect: canvasRect, cam: renderer.cam }; };
 const mapShown = () => (input.held('map') || touch.holding('map') || (layout.mode === 'mobile' && (hud.mapOpen || hud.mapHold))) && scene === 'play';
 function drawOverlay(dt) {
   if (!(layout.touch || layout.mode === 'mobile')) { if (overlay.width) { overlay.width = 0; overlay.height = 0; } return; }

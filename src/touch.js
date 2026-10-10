@@ -47,9 +47,12 @@ export class TouchInput {
   get U() { return SIZE[this.settings.touchSize] || 1; }
 
   // ---------- geometry ----------
+  // safe-area insets: read once per resize, not every frame (getComputedStyle forces a style pass)
   view() {
+    const W = window.innerWidth, H = window.innerHeight;
+    if (this._v && this._v.W === W && this._v.H === H) return this._v;
     const cs = getComputedStyle(this.safe), n = (k) => parseFloat(cs[k]) || 0;
-    return { W: window.innerWidth, H: window.innerHeight, L: n('paddingLeft'), R: n('paddingRight'), T: n('paddingTop'), B: n('paddingBottom') };
+    return (this._v = { W, H, L: n('paddingLeft'), R: n('paddingRight'), T: n('paddingTop'), B: n('paddingBottom') });
   }
   // Rebuilt every frame from the game: four controls always, the rest only while usable (at most six on the right).
   build(g) {
@@ -87,7 +90,7 @@ export class TouchInput {
     list.push({ id: 'lock', x: X(v.L + 34 * U), y: v.H - v.B - 34 * U, r: 22 * U, glyph: 'lock', on: this.lock });
     if (!this.hooks.minimap?.()) list.push({ id: 'pause', x: X(v.W - v.R - 34 * U), y: v.T + 30 * U, r: 22 * U, glyph: 'pause' });
     if (!this.hooks.minimap?.()) list.push({ id: 'map', x: X(v.W - v.R - 88 * U), y: v.T + 30 * U, r: 22 * U, glyph: 'map' });
-    this.ctl = list; this.byId = Object.fromEntries(list.map((b) => [b.id, b]));
+    this.ctl = list; const by = this.byId = {}; for (const b of list) by[b.id] = b;
     this.joy = { x: X(v.L + 130 * U), y: v.H - v.B - 104 * U, R: 58 * U, zone: (x) => (mir ? x > v.W * 0.6 : x < v.W * 0.4) };
   }
   hit(x, y) {
@@ -229,7 +232,8 @@ export class TouchInput {
   draw(c, g) {
     if (!this.live() || !g || !this.ctl.length) return;
     const base = this.settings.touchOpacity ?? 0.5, U = this.U;
-    const pressed = (id) => this.pulse.has(id) || this.held.has(id) || (id === 'lock' && this.lock) || [...this.ptrs.values()].some((p) => p.ctl === id);
+    const down = this._down || (this._down = new Set()); down.clear(); for (const q of this.ptrs.values()) down.add(q.ctl);
+    const pressed = (id) => this.pulse.has(id) || this.held.has(id) || (id === 'lock' && this.lock) || down.has(id);
     // joystick: ghost ring at rest, base and knob while held
     { const j = this.joy, s = this.stick;
       const bx = s ? s.ox : j.x, by = s ? s.oy : j.y;
