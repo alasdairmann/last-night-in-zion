@@ -75,12 +75,17 @@ export class TouchInput {
         list.push({ id: 'next', x: cx + pw / 2 + 28 * U, y: cy, r: 22 * U, glyph: 'right' });
       }
     }
+    if (g.cellar) {
+      const cx = X(ax - 64 * U), cy = ay - RA - 64 * U, pw = 150 * U;
+      list.push({ id: 'interact', rect: true, x: cx, y: cy, w: pw, h: 46 * U, label: g.cellar.idx === g.cellar.dests.length ? 'Stay here' : 'Climb out' });
+      list.push({ id: 'prev', x: cx - pw / 2 - 28 * U, y: cy, r: 22 * U, glyph: 'left' }, { id: 'next', x: cx + pw / 2 + 28 * U, y: cy, r: 22 * U, glyph: 'right' });
+    }
     // weapon chip: tap to cycle, tap the ammo to reload, long-press for the radial
     { const cw = 140 * U, ch = 48 * U, cx = X(ax - RA - 24 * U - 14 * U - cw / 2), cy = v.H - v.B - 32 * U;
       const gun = w && w.kind === 'gun';
       list.push({ id: 'chip', rect: true, x: cx, y: cy, w: cw, h: ch, w0: w, gun, empty: gun && w.mag === 0, chainsaw: p.chainsawT > 0, mir }); }
     list.push({ id: 'lock', x: X(v.L + 34 * U), y: v.H - v.B - 34 * U, r: 22 * U, glyph: 'lock', on: this.lock });
-    list.push({ id: 'pause', x: X(v.W - v.R - 34 * U), y: v.T + 30 * U, r: 22 * U, glyph: 'pause' });
+    if (!this.hooks.minimap?.()) list.push({ id: 'pause', x: X(v.W - v.R - 34 * U), y: v.T + 30 * U, r: 22 * U, glyph: 'pause' });
     if (!this.hooks.minimap?.()) list.push({ id: 'map', x: X(v.W - v.R - 88 * U), y: v.T + 30 * U, r: 22 * U, glyph: 'map' });
     this.ctl = list; this.byId = Object.fromEntries(list.map((b) => [b.id, b]));
     this.joy = { x: X(v.L + 130 * U), y: v.H - v.B - 104 * U, R: 58 * U, zone: (x) => (mir ? x > v.W * 0.6 : x < v.W * 0.4) };
@@ -100,8 +105,10 @@ export class TouchInput {
     const g = this.hooks.game(); if (!g) return;
     if (!this.ctl.length) this.build(g);
     const x = e.clientX, y = e.clientY;
-    const ext = this.hooks.tap?.(x, y, e); if (ext) { e.preventDefault(); return; } // HUD taps (satchel, minimap, cards…)
-    const b = this.hit(x, y);
+    const b0 = this.hit(x, y);
+    const hud = this.hooks.tap?.(x, y, !!b0); // HUD taps (top bar, satchel, cards, tooltips); world tooltips yield to controls
+    if (hud) { this.ptrs.set(e.pointerId, { id: e.pointerId, ctl: 'hud', hud, x0: x, y0: y, x, y, t0: this.time, moved: 0 }); e.preventDefault(); return; }
+    const b = b0;
     const ptr = { id: e.pointerId, ctl: b ? b.id : null, x0: x, y0: y, x, y, t0: this.time, moved: 0 };
     if (b) this.press(b, ptr);
     else if (this.joy && this.joy.zone(x)) { ptr.ctl = 'stick'; this.stick = { id: e.pointerId, ox: x, oy: y, x, y }; }
@@ -124,6 +131,7 @@ export class TouchInput {
   move(e) {
     const ptr = this.ptrs.get(e.pointerId); if (!ptr) return;
     ptr.x = e.clientX; ptr.y = e.clientY; ptr.moved = Math.max(ptr.moved, Math.hypot(ptr.x - ptr.x0, ptr.y - ptr.y0));
+    if (ptr.ctl === 'hud') { ptr.hud.move?.(ptr.x, ptr.y); e.preventDefault(); return; }
     if (ptr.ctl === 'stick' && this.stick) { this.stick.x = ptr.x; this.stick.y = ptr.y; }
     if (ptr.ctl === 'interact') { // swipe along the context button for prev / next; a swipe never buys
       const dx = ptr.x - ptr.x0;
@@ -136,6 +144,8 @@ export class TouchInput {
     const ptr = this.ptrs.get(e.pointerId); if (!ptr) return;
     this.ptrs.delete(e.pointerId);
     const id = ptr.ctl;
+    if (id === 'hud') { ptr.hud.up?.(); e.preventDefault(); return; }
+    if (id === 'interact' && !cancel && !ptr.swiped && this.time - ptr.t0 < 0.25) this.hooks.interactTap?.();
     if (id === 'stick') this.stick = null;
     if (id === 'attack' || id === 'dog' || id === 'map' || id === 'interact') this.held.delete(id);
     if (id === 'chip' && !cancel) {

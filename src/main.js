@@ -28,9 +28,11 @@ const audio = new AudioEngine(S);
 const input = new Input(S);
 layout.init(S);
 let scale = renderer.resize(layout.mode);
+renderer.reduceFx = layout.mode === 'mobile' && S.mobileFx !== 'full';
 const rotateEl = document.getElementById('rotate');
 layout.on(({ changed }) => {
   scale = renderer.resize(layout.mode);
+  renderer.reduceFx = layout.mode === 'mobile' && S.mobileFx !== 'full';
   if (changed && ui.open) ui.render();
   // portrait on a phone: a rotate screen, and the run pauses underneath
   rotateEl.hidden = !layout.portrait;
@@ -42,14 +44,27 @@ const overlay = document.getElementById('overlay'), octx = overlay.getContext('2
 const touch = new TouchInput(document.getElementById('stage'), overlay, S, layout, {
   playing: () => scene === 'play' && deathT < 0 && !ui.open && !layout.portrait,
   game: () => game, pause: () => pause(), cam: () => renderer.cam,
+  minimap: () => layout.mode === 'mobile',
+  tap: (x, y, onCtl) => (layout.mode === 'mobile' ? hud.mobileTap(x, y, onCtl || (touch.joy && touch.joy.zone(x))) : null),
+  interactTap: () => { if (layout.mode === 'mobile') hud.promptCard = !hud.promptCard; },
 });
+hud.onPause = () => pause();
+hud.ctxRect = () => touch.byId.interact;
+hud.tutPoint = (key) => touch.byId[{ shift: 'lock', repair: 'interact', buy: 'interact', shove: 'shove', throw: 'throw', trick: 'trick', dog: 'dog', swap: 'chip', map: 'minimap' }[key]];
+const mobileView = () => { const r = screen.getBoundingClientRect(), sv = touch.view(); return { ...sv, dpr: window.devicePixelRatio || 1, rect: { x: r.left, y: r.top, w: r.width, h: r.height }, cam: renderer.cam }; };
+const mapShown = () => (input.held('map') || touch.holding('map') || (layout.mode === 'mobile' && (hud.mapOpen || hud.mapHold))) && scene === 'play';
 function drawOverlay(dt) {
   if (!(layout.touch || layout.mode === 'mobile')) { if (overlay.width) { overlay.width = 0; overlay.height = 0; } return; }
   const dpr = window.devicePixelRatio || 1, w = Math.round(window.innerWidth * dpr), h = Math.round(window.innerHeight * dpr);
   if (overlay.width !== w || overlay.height !== h) { overlay.width = w; overlay.height = h; }
   octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, w, h); octx.setTransform(dpr, 0, 0, dpr, 0, 0);
   touch.update(scene === 'play' ? game : null, dt);
+  hud.touchUI = layout.touch;
+  const mob = layout.mode === 'mobile' && game && deathT < 0 && (scene === 'play' || scene === 'pause');
+  const v = mob ? mobileView() : null;
+  if (mob) hud.drawMobile(game, octx, v);
   if (scene === 'play' && deathT < 0 && game) touch.draw(octx, game);
+  if (mob) { octx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0); hud.drawMobileOver(game, octx, v, { showMap: mapShown() }); }
 }
 // iOS only lets Web Audio start inside a touch handler
 const unlockAudio = () => { audio.init(); if (scene === 'menu' && ui.open && !audio.musicOn) audio.startMusic(); };
@@ -221,8 +236,8 @@ function frame(now) {
       const zoom = deathT >= 0 ? 1 + 0.5 * Math.min(1, deathT / 1.5) : 1;
       renderer.draw(game, alpha, { zoom: zoom > 1 ? (deathT > 0.7 ? 1.5 : zoom) : 1, desaturate: deathT >= 0 ? Math.min(1, deathT / 1.5) : 0 });
       hud.fps = hud.fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
-      const showMap = (input.held('map') || touch.holding('map')) && scene === 'play';
-      if (deathT < 0) hud.draw(game, renderer.sctx, scale, renderer.cam, { showMap, debug: DEBUG && debug.overlay ? debug : null });
+      const showMap = mapShown();
+      if (deathT < 0 && layout.mode !== 'mobile') hud.draw(game, renderer.sctx, scale, renderer.cam, { showMap, debug: DEBUG && debug.overlay ? debug : null });
       if (DEBUG && debug.f2) drawDebugGeometry();
     }
   }
@@ -291,7 +306,7 @@ window.__enoch = {
   // test hook: advance the simulation n ticks with a fixed input, then render one frame
   advance(n, inp = {}) {
     for (let i = 0; i < n; i++) { touch.update(game, T.dt); game.step(mergeInput({ ...idleInput, ...inp }, touch.sample(game))); pumpEvents(); renderer.update(game, T.dt, true); hud.update(game, T.dt); }
-    renderer.draw(game, 1, {}); hud.draw(game, renderer.sctx, scale, renderer.cam, { showMap: !!inp.map || touch.holding('map') }); drawOverlay(0);
+    renderer.draw(game, 1, {}); if (layout.mode !== 'mobile') hud.draw(game, renderer.sctx, scale, renderer.cam, { showMap: !!inp.map || touch.holding('map') }); drawOverlay(0);
     return { round: game.round, scrap: game.scrap, hp: Math.round(game.p.hp), alive: game.enemies.length, kills: game.stats.kills, dead: game.p.dead, prompt: game.prompt?.label };
   },
 };

@@ -7,6 +7,7 @@ import { weaponName } from '../sim/game.js';
 import { FLOOR, WALL, BLD, DOOR, BAR, PROP } from '../map/town.js';
 import { mapPOIs, paintTownMap, paintStreetNames } from '../ui/poi.js';
 import { keyLabel } from '../input.js';
+import { glyph as glyphBlock } from '../touch.js';
 
 const VW = T.view.w, VH = T.view.h;
 // v1.4 A3: what each timed buff does, one line each (hover the icon)
@@ -159,15 +160,18 @@ export class Hud {
   }
   inset(c, x, y, w, h) { c.fillStyle = '#211b14'; c.fillRect(x, y, w, h); c.fillStyle = '#120e0a'; c.fillRect(x, y, w, 1 / this.s); }
   text(c, str, x, y, { size = 8, font = LBL, weight = '900', color = '#f0ead8', align = 'left', shadow = true, base = 'top' } = {}) {
+    if (this.minText && size < this.minText) size = this.minText; // Mobile: no HUD text under 10 CSS px
     c.font = `${weight} ${size}px ${font}`; c.textAlign = align; c.textBaseline = base;
     if (shadow) { c.fillStyle = '#1d1410'; c.fillText(str, x + 1 / this.s * 1.5, y + 1 / this.s * 1.5); }
     c.fillStyle = color; c.fillText(str, x, y);
   }
-  measure(c, str, size, font = LBL, weight = '900') { c.font = `${weight} ${size}px ${font}`; return c.measureText(str).width; }
+  measure(c, str, size, font = LBL, weight = '900') { if (this.minText && size < this.minText) size = this.minText; c.font = `${weight} ${size}px ${font}`; return c.measureText(str).width; }
   icon(c, key, x, y, scale = 1) { const im = iconHD(key); c.imageSmoothingEnabled = false; c.drawImage(im, x, y, 14 * scale, 14 * scale); }
 
   // ---------- draw ----------
-  draw(g, c, s, cam, opts = {}) {
+  // Desktop and Tablet draw on the game canvas at the integer scale; Mobile draws on the overlay (drawMobile).
+  draw(g, c, s, cam, opts = {}) { return this.drawDesktop(g, c, s, cam, opts); }
+  drawDesktop(g, c, s, cam, opts = {}) {
     this.s = s; const C = this.C, p = g.p;
     this.hovers = [];
     c.save(); c.setTransform(s, 0, 0, s, 0, 0); c.imageSmoothingEnabled = false;
@@ -570,7 +574,7 @@ export class Hud {
       const x = last.x - cam.rx, y = last.y - cam.ry;
       if (x < 6 || x > VW - 6 || y < 6 || y > VH - 6) {
         const cx = VW / 2, cy = VH / 2, dx = x - cx, dy = y - cy, a = Math.atan2(dy, dx);
-        const k = Math.min((VW / 2 - 14) / Math.abs(dx || 1e-3), (VH / 2 - 14) / Math.abs(dy || 1e-3));
+        const k = Math.min((VW / 2 - (this.edgeX || 14)) / Math.abs(dx || 1e-3), (VH / 2 - (this.edgeY || 14)) / Math.abs(dy || 1e-3));
         const ax = cx + dx * k, ay = cy + dy * k, pulse = 0.65 + 0.35 * Math.sin(t * 6), cs = Math.cos(a), sn = Math.sin(a);
         const tri = (r, col) => { c.fillStyle = col; c.beginPath(); c.moveTo(ax + cs * r, ay + sn * r); c.lineTo(ax - cs * r * 0.7 - sn * r * 0.8, ay - sn * r * 0.7 + cs * r * 0.8); c.lineTo(ax - cs * r * 0.7 + sn * r * 0.8, ay - sn * r * 0.7 - cs * r * 0.8); c.closePath(); c.fill(); };
         c.globalAlpha = pulse; tri(8, '#1d1410'); tri(6, this.C.red); c.globalAlpha = 1;
@@ -742,6 +746,342 @@ export class Hud {
     const [px, py] = P(g.p.x, g.p.y);
     c.fillStyle = Math.floor(this.time * 4) % 2 ? '#ffffff' : this.C.amber; c.fillRect(px - 2, py - 2, 4, 4);
     this.plaque(c, px + 5, py - 6, 34, 10); this.text(c, 'YOU ARE HERE', px + 22, py - 4, { size: 4, align: 'center', color: this.C.amber });
+  }
+  // ================= Mobile HUD (Mobile & Touch PRD, "HUD decluttering") =================
+  // Drawn on the overlay canvas in CSS px (v: viewport, safe insets, the game canvas rect, camera, dpr). Three tiers:
+  // always on (top bar, ammo on the weapon chip), when it matters (one toast, the critical card, the objective line,
+  // one buff chip), on demand behind a tap (satchel sheet, buff list, tracker, map, tap-and-hold tooltips).
+  // mt holds this frame's tap targets for mobileTap().
+  drawMobile(g, c, v, opts = {}) {
+    const C = this.C, p = g.p, k = v.rect.w / VW;
+    this.mt = []; this.hovers = []; this.mv = v;
+    const world = () => { c.setTransform(v.dpr * k, 0, 0, v.dpr * k, v.dpr * v.rect.x, v.dpr * v.rect.y); this.s = k; this.minText = 10 / k; };
+    const css = () => { c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0); this.s = 1; this.minText = 10; };
+    // ---- the world layer: vignettes, pop-ups, Cain's speech bubble, pointers
+    world(); c.save(); c.beginPath(); c.rect(0, 0, VW, VH); c.clip();
+    this.edgeX = 14; this.edgeY = 30;
+    this.mobileVignette(c, g);
+    const reduced = this.settings.mobileFx !== 'full';
+    for (const pu of this.popups) {
+      if (reduced && !pu.big) continue; // Mobile default: big pops only
+      const x = pu.x - v.cam.rx, y = pu.y - 12 * (pu.t / 0.6) - v.cam.ry;
+      c.globalAlpha = 1 - Math.max(0, (pu.t - 0.35) / 0.25);
+      this.text(c, `+${pu.amt}`, x, y, { font: NUM, weight: '400', size: 9, color: '#fff2c0', align: 'center' });
+      c.globalAlpha = 1;
+    }
+    if (this.barks.length && !p.dead && this.barks[0].t < 1.1) { // a speech bubble above Cain, shorter than on Desktop
+      const b = this.barks[0], x = p.x - v.cam.rx, y = p.y - 38 - v.cam.ry, w = this.measure(c, b.text, 7) + 10, h = this.minText + 6;
+      this.plaque(c, Math.round(x - w / 2), y - h / 2, w, h, { body: '#4a4830' });
+      c.fillStyle = '#4a4830'; c.fillRect(x - 2, y + h / 2, 4, 3);
+      this.text(c, b.text, x, y - h / 2 + 3, { size: 7, align: 'center', color: C.cream });
+    }
+    this.drawOffscreen(c, g, v.cam);
+    this.drawObjective(c, g, v.cam);
+    for (const sv of g.survivors || []) if (!sv.dead && sv.state === 'home') {
+      const x = sv.x - v.cam.rx, y = sv.y - v.cam.ry;
+      if (x > 0 && x < VW && y > 0 && y < VH) this.mt.push({ x: v.rect.x + (x - 9) * k, y: v.rect.y + (y - 26) * k, w: 18 * k, h: 28 * k, world: true, tip: { title: sv.name, body: `${ROLES[sv.role].name}. ${Math.ceil(sv.hp)}/${sv.maxHp} HP.`, extra: sv.weapon ? `Armed with your ${weaponName(sv.weapon)}` : 'No gun: give them one through the stash' } });
+    }
+    c.restore();
+    css();
+    // ---- centre: round number, downed / grabbed
+    const cx = v.rect.x + v.rect.w / 2, cy = v.rect.y + v.rect.h / 2;
+    if (this.roundAnim > 0 && g.round) {
+      const a = Math.min(1, this.roundAnim / 0.3); c.globalAlpha = a;
+      this.text(c, 'WAVE', cx, cy - 92, { size: 14, align: 'center', color: C.khaki });
+      this.text(c, String(g.round), cx, cy - 76, { font: NUM, weight: '400', size: 48, align: 'center', color: g.dogRound ? C.red : C.amber });
+      c.globalAlpha = 1;
+    }
+    if (p.downed) this.text(c, `GETTING UP ${Math.ceil(p.downT)}`, cx, cy + 46, { font: NUM, weight: '400', size: 16, align: 'center', color: C.red });
+    if (p.grabbed) { const f = Math.floor(this.time * 8) % 2; this.text(c, `MASH ${this.touchUI ? 'ATTACK' : keyLabel(this.settings.keys.attack)}! ${p.grabbed.mash}/8`, cx, cy + 40, { font: NUM, weight: '400', size: f ? 17 : 16, align: 'center', color: C.red }); }
+    if (g.cellar) this.mobileCellar(c, g, v);
+    this.mobileTopBar(c, g, v);
+    this.mobileTransients(c, g, v);
+  }
+  // drawn after the touch controls: sheets, the expanded prompt card, the map and tooltips sit above them
+  drawMobileOver(g, c, v, opts = {}) {
+    const C = this.C;
+    c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0); this.s = 1; this.minText = 10;
+    if (this.promptCard && g.prompt && !g.p.dead) this.mobilePromptCard(c, g, v); else this.promptCard = false;
+    if (opts.showMap) this.mobileMap(c, g, v);
+    if (this.sheet === 'satchel') this.mobileSatchel(c, g, v);
+    // tap-and-hold tooltips: shown while held, then for 2.5 s
+    const tp = this.tipHold || (this.tipPin && this.time < this.tipPin.until ? this.tipPin : null);
+    if (tp) { c.globalAlpha = this.tipHold ? 1 : Math.min(1, (this.tipPin.until - this.time) / 0.5); this.mobileTip(c, tp.tip, tp.x, tp.y, v); c.globalAlpha = 1; }
+    this.s = undefined; this.minText = 0; this.edgeX = 0; this.edgeY = 0;
+    void C;
+  }
+  mobileVignette(c, g) {
+    const p = g.p;
+    if ((!p.dead && p.hp <= p.maxHp * T.player.lowHealth) || p.downed) { const pulse = (Math.sin(this.time * 6) + 1) / 2; for (let i = 0; i < 3; i++) { c.fillStyle = `rgba(110,10,10,${(0.35 - i * 0.1) * (0.6 + 0.4 * pulse)})`; const t = 4 + i * 6; c.fillRect(0, 0, VW, t); c.fillRect(0, VH - t, VW, t); c.fillRect(0, 0, t, VH); c.fillRect(VW - t, 0, t, VH); } }
+    if (g.timedV && g.timedV.mist > 0) { c.fillStyle = `rgba(200,20,20,${0.18 + (Math.sin(this.time * 10) + 1) * 0.06})`; for (let i = 0; i < 2; i++) { const t = 6 + i * 6; c.fillRect(0, 0, VW, t); c.fillRect(0, VH - t, VW, t); c.fillRect(0, 0, t, VH); c.fillRect(VW - t, 0, t, VH); } }
+    if (g.timed.adrenaline > 0) { c.fillStyle = `rgba(224,58,42,${(Math.sin(this.time * 8) + 1) * 0.12})`; c.fillRect(0, 0, VW, 3); c.fillRect(0, VH - 3, VW, 3); c.fillRect(0, 0, 3, VH); c.fillRect(VW - 3, 0, 3, VH); }
+  }
+  buffRows(g) {
+    const p = g.p, rows = [];
+    for (const k of ['adrenaline', 'double', 'sale', 'guts']) if (g.timed[k] > 0) rows.push([k, g.timed[k]]);
+    if (p.chainsawT > 0) rows.push(['chainsaw', p.chainsawT]);
+    if (g.timed.bait > 0) rows.push(['diamond', g.timed.bait]);
+    if (g.timedV) for (const k of ['mist', 'polaroid', 'soldier']) if (g.timedV[k] > 0) rows.push([k === 'mist' ? 't_mist' : 'k_' + k, g.timedV[k]]);
+    return rows.sort((a, b) => a[1] - b[1]);
+  }
+  // the one-line objective: the booster or raid while they last, else the first errand, else the trial
+  objectiveLine(g) {
+    const bs = g.boosterStatus ? g.boosterStatus() : null, raid = g.raidStatus ? g.raidStatus() : null, out = [];
+    if (bs) out.push({ text: `Booster ${Math.ceil(bs.hp * 100)}% · Raiders ${bs.killed}/${bs.total}`, bar: bs.hp, col: '#2e3a50', danger: bs.hp < 0.25 });
+    if (raid) out.push({ text: `RAIDERS ${raid.left}/${raid.total}: kill the Captain`, col: '#6a2a22' });
+    for (const r of g.errandTracker()) out.push({ text: `${r.parallel ? r.name : r.name}: ${r.text}`, timer: typeof r.timer === 'string' ? r.timer : r.timer != null ? `${Math.ceil(r.timer)}s` : '', col: r.parallel ? '#4a4830' : '#3e5a2e' });
+    const t = g.trial; if (t && g.round <= t.until) out.push({ text: `Trial: ${g.trialText()}`, timer: `${Math.floor(t.n)}/${t.target}`, col: '#4a4830' });
+    return out;
+  }
+  mobileTopBar(c, g, v) {
+    const C = this.C, p = g.p, y = v.T + 6, h = 42, R = v.W - v.R - 8;
+    let x = v.L + 8;
+    // health with Scrap under it
+    { const w = 156; this.plaque(c, x, y, w, h);
+      if (p.padLayers) for (let i = 0; i < p.padLayers; i++) { const kk = p.pad[i] / T.padding.pointsPerLayer; c.fillStyle = '#1d1410'; c.fillRect(x + 6 + i * 30, y + 3, 28, 4); c.fillStyle = i === 2 ? '#9aa3b8' : i === 1 ? '#a8784e' : '#c8bf9a'; c.fillRect(x + 7 + i * 30, y + 4, 26 * kk, 2); }
+      const kh = Math.max(0, p.hp / p.maxHp), by = y + (p.padLayers ? 9 : 6);
+      c.fillStyle = '#1d1410'; c.fillRect(x + 5, by - 1, w - 10, 11); c.fillStyle = '#3a1410'; c.fillRect(x + 6, by, w - 12, 9);
+      c.fillStyle = kh <= T.player.lowHealth ? C.red : '#c8503a'; c.fillRect(x + 6, by, Math.round((w - 12) * kh), 9); c.fillStyle = 'rgba(255,255,255,0.25)'; c.fillRect(x + 6, by, Math.round((w - 12) * kh), 2);
+      this.icon(c, 'scrap', x + 5, y + 22);
+      const str = g.infinite ? '∞' : g.scrap.toLocaleString('en-GB');
+      this.text(c, str, x + 22, y + 23, { font: NUM, weight: '400', size: 13, color: C.amber });
+      if (g.streak.mult > 0) this.text(c, `x${(1 + g.streak.mult).toFixed(1)}`, x + w - 6, y + 24, { font: NUM, weight: '400', size: 11, color: C.amber, align: 'right' });
+      else if (g.timed.double > 0) this.text(c, 'x2', x + w - 6, y + 24, { font: NUM, weight: '400', size: 11, color: C.gold, align: 'right' });
+      else if (g.debt > 0) this.text(c, 'DEBT', x + w - 6, y + 24, { font: NUM, weight: '400', size: 10, color: C.red, align: 'right' });
+      this.mt.push({ x, y, w, h, tip: { title: `Health ${Math.ceil(p.hp)}/${p.maxHp}`, body: `Regenerates after a few seconds without being hit. Scrap: ${g.scrap.toLocaleString('en-GB')}${g.bank > 0 ? `, ${g.bank.toLocaleString('en-GB')} safe` : ''}${g.debt > 0 ? `, ${g.debt.toLocaleString('en-GB')} in debt` : ''}.`, extra: p.padLayers ? `Padding: ${PADDING.slice(0, p.padLayers).map((d) => d.name).join(', ')}` : '' } });
+      x += w + 6; }
+    // bandages, only while hurt (they get you back up when you go down)
+    if (g.hasComfort('bandages') && p.hp < p.maxHp && !p.downed) {
+      this.plaque(c, x, y, 44, h, { body: '#5a4a40' }); this.icon(c, 'bandages', x + 3, y + 4, 1.5);
+      this.text(c, String(p.bandages), x + 40, y + 26, { font: NUM, weight: '400', size: 12, align: 'right', color: p.bandages ? C.cream : C.red });
+      this.mt.push({ x, y, w: 44, h, tip: { title: `Bandages (${p.bandages}/${g.bandageCap()})`, body: 'When you go down, a Bandage gets you back up. Hold the context button by a hurt survivor to bandage them.' } });
+      x += 50;
+    }
+    // wave with NEXT / LEFT
+    { const w = 82, blink = this.roundBlink > 0 && Math.floor(this.roundBlink * 4) % 2;
+      this.plaque(c, x, y, w, h, g.state === 'laststand' ? { danger: true } : {});
+      this.text(c, 'WAVE', x + 6, y + 4, { size: 11, color: C.khaki });
+      if (!blink) this.text(c, g.round ? String(g.round) : '-', x + w - 6, y + 2, { font: NUM, weight: '400', size: 16, align: 'right', color: g.dogRound || g.raidRound ? C.red : C.amber });
+      const rem = g.state === 'active' ? g.remaining() : 99;
+      let sub = '', col = C.khaki;
+      if (g.state === 'laststand') { const E = g.escape; sub = E.stage === 'drive' ? 'DRIVE!' : `HOLD ${Math.max(0, Math.ceil(E.standLen - E.standT))}s`; col = C.cream; }
+      else if (rem <= T.lastEnemy.outlineAt && rem > 0) { sub = `${rem} LEFT`; col = C.red; }
+      else if (g.state !== 'active' && !p.dead) sub = `NEXT ${Math.ceil(g.breakT)}`;
+      if (sub) this.text(c, sub, x + 6, y + 24, { font: NUM, weight: '400', size: 11, color: col });
+      if (g.weather && g.weather !== 'clear') this.icon(c, 'w_' + g.weather, x + w - 18, y + 24, 1);
+      this.mt.push({ x, y, w, h, tip: g.weather && g.weather !== 'clear' ? { title: WEATHER[g.weather].name, body: WEATHER[g.weather].desc } : { title: `Wave ${g.round || 0}`, body: g.state === 'active' ? `${g.remaining()} of the dead still to come or still standing.` : 'A break between waves: repair, buy, and get ready.' } });
+      x += w + 6; }
+    // right end: pause, satchel, minimap
+    let rx = R - 44;
+    this.plaque(c, rx, y, 44, h); glyphBlock(c, 'pause', rx + 22, y + h / 2, 18, C.cream);
+    this.mt.push({ x: rx, y, w: 44, h, id: 'pause' });
+    rx -= 50;
+    { const ripe = g.p.comforts.some((id) => id !== 'bandages' && g.ripe(id));
+      this.plaque(c, rx, y, 44, h, this.sheet === 'satchel' ? { body: '#7a7440' } : {}); glyphBlock(c, 'satchel', rx + 22, y + h / 2, 18, C.cream);
+      if (ripe) { c.fillStyle = '#1d1410'; c.fillRect(rx + 31, y + 3, 10, 10); c.fillStyle = Math.floor(this.time * 2) % 2 ? '#fff2b0' : '#f0d070'; c.fillRect(rx + 32, y + 4, 8, 8); }
+      this.mt.push({ x: rx, y, w: 44, h, id: 'satchel' }); }
+    rx -= 72;
+    { const mw = 66, mh = h; this.plaque(c, rx, y, mw, mh, { body: '#211b14' });
+      const cv = this.townCache(g); if (cv) { const s = Math.min((mw - 6) / cv.width, (mh - 6) / cv.height), w = cv.width * s, hh = cv.height * s, ox = rx + (mw - w) / 2, oy = y + (mh - hh) / 2; c.imageSmoothingEnabled = true; c.drawImage(cv, ox, oy, w, hh); c.imageSmoothingEnabled = false;
+        const P = (wx, wy) => [ox + wx / (g.W * 16) * w, oy + wy / (g.H * 16) * hh];
+        const o = g.errandObjective && g.errandObjective(); if (o) { const [qx, qy] = P(o.x, o.y); c.fillStyle = '#6cbf4a'; c.fillRect(qx - 2, qy - 2, 4, 4); }
+        const [px, py] = P(p.x, p.y); c.fillStyle = Math.floor(this.time * 4) % 2 ? '#ffffff' : C.amber; c.fillRect(px - 2, py - 2, 4, 4); }
+      this.mt.push({ x: rx, y, w: mw, h: mh, id: 'minimap' }); }
+    // one buff chip: the soonest to run out, "+N" for the rest; tap for the list
+    const buffs = this.buffRows(g);
+    if (buffs.length) {
+      const w = 78; rx -= w + 6;
+      const [kk, t] = buffs[0], flash = t < 5 && Math.floor(this.time * 6) % 2;
+      this.plaque(c, rx, y, w, h, kk === 'diamond' ? { danger: true } : {});
+      if (!flash) this.icon(c, kk, rx + 4, y + 6, 1.43);
+      this.text(c, `${Math.ceil(t)}s`, rx + w - 6, y + 4, { font: NUM, weight: '400', size: 13, align: 'right', color: C.amber });
+      if (buffs.length > 1) this.text(c, `+${buffs.length - 1}`, rx + w - 6, y + 24, { font: NUM, weight: '400', size: 11, align: 'right', color: C.khaki });
+      this.mt.push({ x: rx, y, w, h, id: 'buffs' });
+      if (this.buffOpen > this.time) {
+        let ly = y + h + 8;
+        for (const [bk, bt] of buffs) {
+          const info = BUFF_INFO[bk] || [bk, ''], bw = 230, bx = Math.min(rx, v.W - v.R - 8 - bw), lines = this.wrap(c, info[1], bw - 46, 11), bh = 22 + lines.length * 14;
+          this.plaque(c, bx, ly, bw, bh, { body: '#2a2820' }); this.icon(c, bk, bx + 5, ly + 5, 1.43);
+          this.text(c, info[0], bx + 32, ly + 4, { size: 12, color: C.amber }); this.text(c, `${Math.ceil(bt)}s`, bx + bw - 6, ly + 4, { font: NUM, weight: '400', size: 11, align: 'right', color: C.cream });
+          lines.forEach((l, i) => this.text(c, l, bx + 32, ly + 20 + i * 14, { size: 11, color: C.cream }));
+          ly += bh + 4;
+        }
+      }
+    }
+    // the objective: whatever space is left, one line; tap to expand the whole tracker
+    const objs = this.objectiveLine(g), ow = rx - 6 - x;
+    if (objs.length && ow > 80) {
+      const o = objs[0];
+      this.plaque(c, x, y, ow, h, { body: o.col, danger: o.danger });
+      const tw = o.timer ? this.measure(c, o.timer, 11, NUM, '400') + 8 : 0;
+      this.text(c, this.ellipsis(c, o.text, ow - 14 - tw - (objs.length > 1 ? 24 : 0), 12), x + 7, y + (o.bar != null ? 6 : 13), { size: 12, color: C.cream });
+      if (o.timer) this.text(c, o.timer, x + ow - 7 - (objs.length > 1 ? 24 : 0), y + 14, { font: NUM, weight: '400', size: 11, align: 'right', color: C.amber });
+      if (objs.length > 1) this.text(c, `+${objs.length - 1}`, x + ow - 6, y + 14, { font: NUM, weight: '400', size: 11, align: 'right', color: C.khaki });
+      if (o.bar != null) { c.fillStyle = '#211b14'; c.fillRect(x + 7, y + 26, ow - 14, 6); c.fillStyle = o.bar > 0.5 ? C.green : o.bar > 0.25 ? C.amber : C.red; c.fillRect(x + 7, y + 26, (ow - 14) * o.bar, 6); }
+      this.mt.push({ x, y, w: ow, h, id: 'tracker' });
+      if (this.trackerOpen > this.time) {
+        let ly = y + h + 8;
+        const bw = Math.min(ow, 360);
+        for (const r of objs) { const lines = this.wrap(c, r.text, bw - 16, 12), bh = 10 + lines.length * 15; this.plaque(c, x, ly, bw, bh, { body: r.col }); lines.forEach((l, i) => this.text(c, l, x + 8, ly + 5 + i * 15, { size: 12, color: C.cream })); if (r.timer) this.text(c, r.timer, x + bw - 8, ly + 5, { font: NUM, weight: '400', size: 11, align: 'right', color: C.amber }); ly += bh + 4; }
+      }
+    }
+    this.topBarBottom = y + h;
+  }
+  ellipsis(c, s, w, size) { if (this.measure(c, s, size) <= w) return s; let t = s; while (t.length > 1 && this.measure(c, t + '…', size) > w) t = t.slice(0, -1); return t + '…'; }
+  townCache(g) {
+    const kk = 3, key = [...g.openZones].join(',') + (g.power ? 'p' : '') + (g.wrecks || []).length + g.safeBars.map((b) => (b.planks > 0 ? 1 : 0)).join('');
+    if (key !== this.mapKey || !this.mapCache) { this.mapKey = key; const cv = document.createElement('canvas'); cv.width = g.W * kk; cv.height = g.H * kk; paintTownMap(cv.getContext('2d'), g, kk); this.mapCache = cv; }
+    return this.mapCache;
+  }
+  // At most three transient messages, in priority order: critical, then objective, then a toast (then the tutorial,
+  // a tape). One toast at a time, 3 s, swipe up to dismiss; everything else is already in the notes tray.
+  mobileTransients(c, g, v) {
+    const C = this.C, msgs = [];
+    const crit = this.cards.find((o) => o.prio === 'critical');
+    if (crit) msgs.push(['critical', crit]);
+    const obj = this.cards.find((o) => o.prio === 'objective' && o.t < Math.min(o.life, 4));
+    if (obj) msgs.push(['toast', obj]);
+    const info = this.cards.find((o) => o.prio === 'info' && o.t < 3);
+    if (info) msgs.push(['toast', info]);
+    if (this.tut && !g.p.dead) msgs.push(['tut', this.tut]);
+    if (this.tape) msgs.push(['tape', this.tape]);
+    const show = msgs.slice(0, 3);
+    let ty = (this.topBarBottom || v.T + 48) + 8;
+    const mid = v.rect.x + v.rect.w / 2, tw = Math.min(380, v.W - v.L - v.R - 260);
+    let toasts = 0;
+    for (const [kind, m] of show) {
+      if (kind === 'critical') {
+        const w = Math.min(420, v.W - v.L - v.R - 40), sub = m.sub ? this.wrap(c, m.sub, w - 70, 12) : [], h = Math.max(52, 24 + sub.length * 15), x = mid - w / 2, y = v.rect.y + v.rect.h * 0.3;
+        const a = Math.max(0, Math.min(1, m.t / 0.15, (m.life - m.t) / 0.3)); c.globalAlpha = a;
+        this.plaque(c, x, y, w, h, { body: '#5a2620' });
+        c.fillStyle = Math.floor(this.time * 3) % 2 || m.t > 3 ? C.red : '#ff8a70'; c.fillRect(x, y, 4, h);
+        this.text(c, m.n > 1 ? `${m.text} x${m.n}` : m.text, x + 12, y + 6, { size: 14, color: C.cream });
+        sub.forEach((l, i) => this.text(c, l, x + 12, y + 25 + i * 15, { size: 12, color: C.khaki }));
+        const bx = x + w - 48, by = y + (h - 44) / 2; c.fillStyle = '#1d1410'; c.fillRect(bx, by, 44, 44); c.fillStyle = '#3a1a16'; c.fillRect(bx + 2, by + 2, 40, 40); glyphBlock(c, 'close', bx + 22, by + 22, 16, C.cream);
+        c.globalAlpha = 1;
+        this.mt.push({ x: bx, y: by, w: 44, h: 44, id: 'dismiss', card: m });
+        continue;
+      }
+      if (kind === 'toast') {
+        if (toasts++) continue; // one toast at a time
+        const lines = m.sub ? this.wrap(c, m.sub, tw - 16, 11).slice(0, 2) : [], h = 22 + lines.length * 14, x = mid - tw / 2, y = ty;
+        const a = Math.max(0, Math.min(1, m.t / 0.15, ((m.prio === 'objective' ? 4 : 3) - m.t) / 0.3)), drag = this.toastDrag && this.toastDrag.card === m ? Math.min(0, this.toastDrag.dy) : 0;
+        c.globalAlpha = a * (1 + drag / 60);
+        this.plaque(c, x, y + drag, tw, h, { body: m.prio === 'objective' ? '#3e5a2e' : m.danger ? '#5a3a2a' : '#4a4830' });
+        this.text(c, this.ellipsis(c, m.n > 1 ? `${m.text} x${m.n}` : m.text, tw - 16, 13), x + 8, y + drag + 4, { size: 13, color: m.prio === 'objective' ? '#c8f0a0' : m.danger ? C.cream : C.amber });
+        lines.forEach((l, i) => this.text(c, l, x + 8, y + drag + 21 + i * 14, { size: 11, color: C.khaki }));
+        c.globalAlpha = 1;
+        this.mt.push({ x, y, w: tw, h, id: 'toast', card: m });
+        ty += h + 6;
+        continue;
+      }
+      if (kind === 'tut') {
+        const txt = this.tutText(m.key), w = Math.min(this.measure(c, txt, 13) + 24, v.W - 300), y = v.rect.y + v.rect.h * 0.62, a = Math.max(0, Math.min(1, m.t / 0.15, (4.5 - m.t) / 0.3));
+        c.globalAlpha = a; this.plaque(c, mid - w / 2, y, w, 26, { body: '#3e5a2e' }); this.text(c, this.ellipsis(c, txt, w - 16, 13), mid, y + 5, { size: 13, align: 'center', color: C.cream });
+        const at = this.tutPoint?.(m.key); if (at) { const ax = at.x, ay = at.y - at.r - 6, dir = ax > mid ? 1 : -1; c.strokeStyle = '#a8e070'; c.lineWidth = 3; c.beginPath(); c.moveTo(mid + dir * w / 2, y + 13); c.lineTo(ax, ay); c.stroke(); c.fillStyle = '#a8e070'; c.beginPath(); c.arc(ax, ay, 5, 0, Math.PI * 2); c.fill(); }
+        c.globalAlpha = 1; continue;
+      }
+      if (kind === 'tape') {
+        const n = Math.floor(m.t * 30), w = Math.min(420, v.W - 300), lines = this.wrap(c, m.text.slice(0, n), w - 16, 12).slice(-4), x = mid - w / 2, y = ty;
+        this.plaque(c, x, y, w, 24 + lines.length * 15, { body: '#3a3a30' });
+        this.text(c, `TAPE: ${m.title.toUpperCase()}`, x + 8, y + 4, { size: 11, color: C.amber });
+        lines.forEach((l, i) => this.text(c, l, x + 8, y + 20 + i * 15, { size: 12, color: C.cream }));
+        ty += 30 + lines.length * 15;
+      }
+    }
+  }
+  mobileCellar(c, g, v) {
+    const C = this.C, to = g.cellarDest(), n = g.cellar.dests.length + 1, i = g.cellar.idx + 1;
+    const busy = to && g.zedsNear(to.x, to.y, T.hatch.clearR), w = 300, x = v.rect.x + v.rect.w / 2 - w / 2, y = v.rect.y + v.rect.h * 0.62;
+    this.plaque(c, x, y, w, 52, { body: '#3a2a1e' });
+    this.text(c, `THE CELLARS  ${i}/${n}`, x + w / 2, y + 4, { size: 11, align: 'center', color: C.khaki });
+    this.text(c, to ? to.name : 'STAY HERE', x + w / 2, y + 18, { size: 14, align: 'center', color: busy ? C.red : C.cream });
+    this.text(c, busy ? 'The dead are up there' : this.touchUI ? 'Arrows choose; the button climbs out' : `${keyLabel(this.settings.keys.interact)}: climb out   ESC: stay`, x + w / 2, y + 36, { size: 10, align: 'center', color: busy ? C.red : C.khaki });
+  }
+  // the context button's card: label, cost, description, options; the button itself confirms (hold)
+  mobilePromptCard(c, g, v) {
+    const C = this.C, pr = g.prompt, b = this.ctxRect?.(); if (!b) return;
+    const cost = (pr.cost ? ` · ${pr.cost.toLocaleString('en-GB')} Scrap` : '') + (pr.partsCost ? ` · ${pr.partsCost} Parts` : '');
+    const w = 300, body = pr.sub ? this.wrap(c, pr.sub, w - 16, 12) : [], h = 30 + body.length * 15 + (pr.menuN > 1 ? 18 : 0) + 18;
+    const x = Math.max(v.L + 8, Math.min(v.W - v.R - w - 8, b.x - w / 2)), y = Math.max((this.topBarBottom || 0) + 6, b.y - b.h / 2 - h - 34);
+    this.plaque(c, x, y, w, h, { body: '#2a2820' });
+    this.text(c, this.ellipsis(c, pr.label + cost, w - 16, 13), x + 8, y + 6, { size: 13, color: pr.disabled ? C.khaki : pr.afford ? C.amber : C.red });
+    body.forEach((l, i) => this.text(c, l, x + 8, y + 26 + i * 15, { size: 12, color: pr.warn ? C.amber : C.cream }));
+    let ly = y + 26 + body.length * 15;
+    if (pr.menuN > 1) { this.text(c, `Option ${pr.menuIdx + 1} of ${pr.menuN}: use the arrows or swipe`, x + 8, ly, { size: 11, color: C.khaki }); ly += 18; }
+    if (pr.choices) pr.choices.forEach((id, i) => { const E = EFFECTS[id]; this.text(c, `${i === pr.choice ? '▶ ' : '   '}${E.name}: ${E.desc}`, x + 8, ly + i * 15 - (pr.menuN > 1 ? 0 : 0), { size: 11, color: i === pr.choice ? E.color : C.khaki }); });
+    this.text(c, pr.disabled ? '' : 'Hold the button to confirm', x + w - 8, y + h - 16, { size: 10, align: 'right', color: '#a8e070' });
+  }
+  mobileSatchel(c, g, v) {
+    const C = this.C, p = g.p, w = Math.min(460, v.W - v.L - v.R - 40), x = (v.W - w) / 2, y = (this.topBarBottom || v.T + 48) + 8, maxH = v.H - v.B - y - 8;
+    this.mt.push({ x: 0, y: 0, w: v.W, h: v.H, id: 'sheetBg' });
+    const rows = [];
+    const held = p.comforts.filter((id) => id !== 'bandages');
+    for (const id of held) { const ripe = g.ripe(id), left = Math.max(0, T.comforts.ripenRounds - (p.comfortRounds[id] || 0)); rows.push({ icon: id, title: COMFORTS[id].name + (ripe ? ' (ripe)' : ''), body: COMFORT_INFO[id].does, extra: ripe ? COMFORT_INFO[id].ripe : `Ripens in ${left} wave${left === 1 ? '' : 's'}`, ripe }); }
+    const free = Math.max(0, Math.min(g.comfortSlotMax() + 1, g.comfortCap()) - held.length);
+    if (free) rows.push({ title: `${free} empty comfort slot${free > 1 ? 's' : ''}`, body: 'Comforts are bought at their machines around town.' });
+    if (g.hasComfort('bandages')) rows.push({ icon: 'bandages', title: `Bandages ${p.bandages}/${g.bandageCap()}`, body: COMFORT_INFO.bandages.does });
+    if (p.secondWind) rows.push({ icon: 'secondWind', title: 'Second Wind', body: 'When you go down, you get back up once.' });
+    rows.push({ icon: 'power', title: g.power ? `Generator: ${g.fuel} waves of diesel` : g.fuseBlown ? 'Generator: the fuse has blown' : 'Generator: off', body: `Noise ${Math.round(g.noise)}%: guns and explosions bring more of the dead. Parts: ${g.parts}.` });
+    if (g.keepsake.held) rows.push({ icon: 'k_' + g.keepsake.held, title: KEEPSAKES[g.keepsake.held].name, body: KEEPSAKES[g.keepsake.held].desc, extra: 'Double-tap the Trick button to use it' });
+    const lay = rows.map((r) => { const b = this.wrap(c, r.body, w - 60, 11), e = r.extra ? this.wrap(c, r.extra, w - 60, 11) : []; return { r, b, e, h: Math.max(44, 22 + (b.length + e.length) * 14) }; });
+    const h = Math.min(maxH, 40 + lay.reduce((s, l) => s + l.h + 4, 0));
+    this.plaque(c, x, y, w, h, { body: '#2a2820' });
+    this.text(c, 'SATCHEL', x + 10, y + 8, { size: 14, color: C.amber });
+    this.mt.push({ x, y, w, h, id: 'sheet' });
+    const bx = x + w - 48; glyphBlock(c, 'close', bx + 22, y + 22, 16, C.cream); this.mt.push({ x: bx, y, w: 48, h: 44, id: 'sheetClose' });
+    c.save(); c.beginPath(); c.rect(x, y + 36, w, h - 40); c.clip();
+    let ly = y + 40;
+    for (const l of lay) {
+      if (l.r.ripe) { c.fillStyle = 'rgba(240,208,112,0.12)'; c.fillRect(x + 4, ly, w - 8, l.h); }
+      if (l.r.icon) this.icon(c, l.r.icon, x + 10, ly + 6, 2);
+      this.text(c, l.r.title, x + 50, ly + 4, { size: 13, color: l.r.ripe ? '#f0d070' : C.amber });
+      l.b.forEach((t, i) => this.text(c, t, x + 50, ly + 21 + i * 14, { size: 11, color: C.cream }));
+      l.e.forEach((t, i) => this.text(c, t, x + 50, ly + 21 + (l.b.length + i) * 14, { size: 11, color: l.r.ripe ? '#f0d070' : C.khaki }));
+      ly += l.h + 4;
+    }
+    c.restore();
+  }
+  mobileMap(c, g, v) {
+    // the Desktop map, scaled up to fill the screen; tap and hold a place for its tooltip
+    const mw = g.W * 3 + 12, mh = g.H * 3 + 22, s = Math.min((v.W - v.L - v.R - 16) / mw, (v.H - v.T - v.B - 16) / mh);
+    c.fillStyle = 'rgba(8,10,18,0.7)'; c.fillRect(0, 0, v.W, v.H);
+    const ox = v.W / 2 - VW / 2 * s, oy = v.H / 2 - VH / 2 * s;
+    c.setTransform(v.dpr * s, 0, 0, v.dpr * s, v.dpr * ox, v.dpr * oy); this.s = s; this.minText = 10 / s;
+    const keep = this.hovers; this.drawMap(c, g); const spots = this.hovers; this.hovers = keep;
+    c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0); this.s = 1; this.minText = 10;
+    this.mt.push({ x: 0, y: 0, w: v.W, h: v.H, id: 'mapBg' });
+    for (const hv of spots) this.mt.push({ x: ox + hv.x * s - 4, y: oy + hv.y * s - 4, w: hv.w * s + 8, h: hv.h * s + 8, tip: hv });
+    if (this.mapOpen) { const bx = v.W - v.R - 56, by = v.T + 8; this.plaque(c, bx, by, 44, 44); glyphBlock(c, 'close', bx + 22, by + 22, 16, this.C.cream); this.mt.push({ x: bx, y: by, w: 44, h: 44, id: 'mapClose' }); }
+  }
+  mobileTip(c, h, mx, my, v) {
+    const C = this.C, w = 250, body = this.wrap(c, h.body || '', w - 16, 12), extra = h.extra ? this.wrap(c, h.extra, w - 16, 11) : [];
+    const ht = 26 + body.length * 15 + (extra.length ? 4 + extra.length * 14 : 0);
+    const x = Math.max(v.L + 6, Math.min(v.W - v.R - w - 6, mx - w / 2)); let y = my - ht - 28; if (y < v.T + 6) y = my + 28;
+    this.plaque(c, x, y, w, ht, { body: '#2a2820' });
+    this.text(c, h.title, x + 8, y + 5, { size: 13, color: h.ripe ? '#f0d070' : C.amber });
+    body.forEach((l, i) => this.text(c, l, x + 8, y + 23 + i * 15, { size: 12, color: C.cream }));
+    extra.forEach((l, i) => this.text(c, l, x + 8, y + 27 + body.length * 15 + i * 14, { size: 11, color: h.ripe ? '#f0d070' : C.khaki }));
+  }
+  // A pointer went down on the overlay. Returns a handle (the touch layer calls its up / move) if the HUD takes it.
+  mobileTap(x, y, inJoy) {
+    const hit = (t) => x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h;
+    const list = this.mt || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const t = list[i]; if (!hit(t) || (t.world && inJoy)) continue;
+      const t0 = this.time, y0 = y;
+      if (t.tip) { this.tipHold = { tip: t.tip, x, y }; this.tipPin = null; return { up: () => { this.tipPin = { tip: t.tip, x, y, until: this.time + 2.5 }; this.tipHold = null; } }; }
+      if (t.id === 'minimap') { this.mapHold = true; return { up: () => { this.mapHold = false; if (this.time - t0 < 0.35) this.mapOpen = !this.mapOpen; } }; }
+      if (t.id === 'toast') { this.toastDrag = { card: t.card, dy: 0 }; return { move: (mx, my) => { this.toastDrag.dy = my - y0; }, up: () => { if (this.toastDrag && this.toastDrag.dy < -20) this.dismissCard(t.card); this.toastDrag = null; } }; }
+      const act = {
+        pause: () => this.onPause?.(), satchel: () => { this.sheet = this.sheet === 'satchel' ? null : 'satchel'; }, buffs: () => { this.buffOpen = this.buffOpen > this.time ? 0 : this.time + 3; },
+        tracker: () => { this.trackerOpen = this.trackerOpen > this.time ? 0 : this.time + 3; }, dismiss: () => this.dismissCard(t.card),
+        sheetClose: () => { this.sheet = null; }, sheetBg: () => { this.sheet = null; }, sheet: () => {}, mapClose: () => { this.mapOpen = false; }, mapBg: () => {},
+      }[t.id];
+      if (!act) continue;
+      return { up: () => act() };
+    }
+    return null;
   }
   drawDebug(c, g, d) {
     const lines = [

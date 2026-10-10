@@ -164,7 +164,7 @@ export class UI {
     });
   }
   settings() {
-    const S = this.store.settings;
+    const S = this.store.settings, self = this;
     const items = [
       { label: 'Music volume', type: 'slider', get: () => S.musicVol, set: (v) => { S.musicVol = v; this.hooks.volumes(); } },
       { label: 'SFX volume', type: 'slider', get: () => S.sfxVol, set: (v) => { S.sfxVol = v; this.hooks.volumes(); } },
@@ -173,6 +173,7 @@ export class UI {
       { label: 'Hit stop', type: 'toggle', options: ['on', 'off'], get: () => (S.hitStop ? 'on' : 'off'), set: (v) => { S.hitStop = v === 'on'; this.hooks.applySettings(); } },
       { label: 'Scrap pop-ups', type: 'toggle', options: ['on', 'off'], get: () => (S.popups ? 'on' : 'off'), set: (v) => (S.popups = v === 'on') },
       { label: 'Damage numbers', type: 'toggle', options: ['on', 'off'], get: () => (S.damageNumbers !== false ? 'on' : 'off'), set: (v) => (S.damageNumbers = v === 'on') },
+      { label: 'Pop-ups and damage numbers', type: 'select', options: ['reduced', 'full'], get: () => S.mobileFx, set: (v) => { S.mobileFx = v; this.hooks.layout.update(true); }, get hidden() { return self.hooks.layout.mode !== 'mobile'; } },
       { label: 'Tutorial prompts', type: 'toggle', options: ['on', 'off'], get: () => (S.tutorial ? 'on' : 'off'), set: (v) => { S.tutorial = v === 'on'; if (S.tutorial) this.store.tut = {}; } },
       { label: 'God mode (unlimited everything)', type: 'toggle', options: ['off', 'on'], get: () => (S.godMode ? 'on' : 'off'), set: (v) => { S.godMode = v === 'on'; } },
       { label: 'Colour-blind assist', type: 'toggle', options: ['off', 'on'], get: () => (S.colourBlind ? 'on' : 'off'), set: (v) => { S.colourBlind = v === 'on'; document.body.classList.toggle('cb', S.colourBlind); } },

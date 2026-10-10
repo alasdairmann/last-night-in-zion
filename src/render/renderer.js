@@ -59,7 +59,7 @@ export class Renderer {
   }
   flushDamage(t, kill = false) {
     const amt = Math.round(t.acc); t.acc = 0; t.win = 0;
-    if (amt >= 1 && this.settings.damageNumbers !== false) {
+    if (amt >= 1 && this.settings.damageNumbers !== false && !(this.reduceFx && !t.crit)) {
       this.dmgNums.push({ x: t.x + (Math.random() - 0.5) * 8, y: t.y - (t.big ? 30 : 24), amt, crit: t.crit, kill, t: 0, dx: (Math.random() - 0.5) * 6 });
       if (this.dmgNums.length > 40) this.dmgNums.shift();
     }
