@@ -408,7 +408,7 @@ export class Game {
     const blocked = this.noAttack || p.grabbed || p.inEngine;
     if (w.kind === 'melee') {
       // v1.3 C5: tap swings; hold charges a power attack on stamina, release spins
-      // v1.4 D1: it never fires by itself at full charge. It holds (with a tell) until you let go, or until stamina runs dry
+      // v1.4 D1: it never fires by itself at full charge. It holds (with a tell) until you let go, even once stamina runs dry
       if (p.charge >= 0) {
         const P = T.power;
         if (p.downed || blocked) { p.charge = -1; p.chargeReady = false; return; }

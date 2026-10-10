@@ -13,7 +13,7 @@ export const T = deepFreeze({
     footR: 4, cornerSlide: 6, softSlow: 0.9, // v1.4 C1: collision is the feet only; slide round corners; bins and benches slow you 10%
   },
   stamina: { regen: 0.25 },
-  // v1.4 D1/D2: hold to charge, it holds at full (or where stamina runs out), release fires. Damage and knockback scale with charge c (0..1)
+  // v1.4 D1/D2: hold to charge, it holds at full (or where stamina runs out) until release, even on empty stamina. Damage and knockback scale with charge c (0..1)
   power: { holdDelay: 0.3, chargeTime: 0.7, drain: 1.0, minStamina: 0.25, reserve: 0.04, holdDrain: 0.12, reachAdd: 8, stagger: 0.8, moveMult: 0.5, recover: 0.3,
     dmg: [[0, 0.25], [0.2, 0.4], [0.5, 0.7], [1, 1.5]], kb: [[0, 10], [0.2, 20], [0.5, 40], [1, 80]] },
   shove: { stamina: 0.6, cooldown: 2.5, reach: 18, arc: 90, knockback: 30, stagger: 0.6, dashTime: 0.3, dashSpeed: 210 },

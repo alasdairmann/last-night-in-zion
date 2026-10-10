@@ -650,12 +650,13 @@ test('C2: a walker wedged on a prop gets itself free', () => {
   e.noticed = true; run(g, 60 * 8);
   assert.ok(Math.hypot(e.x - g.p.x, e.y - g.p.y) < 30, `still stuck at ${e.x},${e.y}`);
 });
-test('D1: a full charge holds until release; only running out of stamina fires it', () => {
+test('D1: a full charge holds until release, even after stamina runs dry', () => {
   const g = fresh(); quiet(g);
   run(g, 90, { attack: true });
   assert.ok(g.p.chargeReady && g.p.charge >= 0, 'holding at full');
   run(g, 60, { attack: true }); assert.ok(g.p.charge >= 0, 'still holding a second later');
-  run(g, 60 * 10, { attack: true }); assert.equal(g.p.charge, -1, 'stamina ran out and it fired');
+  run(g, 60 * 10, { attack: true }); assert.ok(g.p.charge >= 0 && g.p.stam === 0, 'still held on empty stamina');
+  run(g, 1); assert.equal(g.p.charge, -1, 'release fires it');
 });
 test('D2: power damage scales 0.4x / 0.7x / 1.5x with charge and hits everything round Cain', () => {
   const hit = (c) => {
