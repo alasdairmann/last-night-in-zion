@@ -1,0 +1,12 @@
+{
+  "name": "Last Night in Zion",
+  "short_name": "Zion",
+  "description": "Top-down, round-based horde survival. A prequel to Project Enoch.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#15110c",
+  "theme_color": "#15110c",
+  "icons": [{ "src": "art/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

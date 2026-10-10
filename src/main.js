@@ -10,6 +10,7 @@ import { store } from './store.js';
 import { FIND_TYPES } from './data.js';
 import { snapshot, restore } from './sim/save.js';
 import { RunLog } from './runlog.js';
+import { layout } from './layout.js';
 
 const runlog = new RunLog();
 
@@ -24,14 +25,27 @@ const renderer = new Renderer(screen, S);
 const hud = new Hud(S, store);
 const audio = new AudioEngine(S);
 const input = new Input(S);
-let scale = renderer.resize();
-window.addEventListener('resize', () => { scale = renderer.resize(); });
+layout.init(S);
+let scale = renderer.resize(layout.mode);
+const rotateEl = document.getElementById('rotate');
+layout.on(() => {
+  scale = renderer.resize(layout.mode);
+  // portrait on a phone: a rotate screen, and the run pauses underneath
+  rotateEl.hidden = !layout.portrait;
+  if (layout.portrait && scene === 'play' && deathT < 0) pause();
+});
+rotateEl.hidden = !layout.portrait;
+// iOS only lets Web Audio start inside a touch handler
+const unlockAudio = () => { audio.init(); if (scene === 'menu' && ui.open && !audio.musicOn) audio.startMusic(); };
+window.addEventListener('touchend', unlockAudio, { passive: true });
+window.addEventListener('pointerup', (e) => { if (e.pointerType !== 'mouse') unlockAudio(); });
 
 let game = null, scene = 'menu', acc = 0, last = performance.now();
 let escapeT = -1, deathT = -1, runStart = 0, runTime = 0, inputLog = [], attractPan = 0;
 const debug = { overlay: false, f2: false };
 
 const ui = new UI(document.getElementById('ui'), store, {
+  layout,
   play: () => startRun(),
   resume: () => resume(),
   quit: () => toMenu(),
@@ -196,7 +210,7 @@ function frame(now) {
       if (DEBUG && debug.f2) drawDebugGeometry();
     }
   }
-  requestAnimationFrame(frame);
+  if (!frame.once) requestAnimationFrame(frame);
 }
 const idleInput = { up: false, down: false, left: false, right: false, attack: false, shift: false, interact: false, map: false, prev: false, next: false, wheel: 0, slot: 0, reload: false, throw: false, shove: false, trick: false, dog: false };
 function packInput(i) { return (i.up | i.down << 1 | i.left << 2 | i.right << 3 | i.attack << 4 | i.shift << 5 | i.interact << 6 | i.prev << 7 | i.next << 8 | i.reload << 9 | i.throw << 10 | i.shove << 11 | i.trick << 12 | i.dog << 13) + i.slot * 16384 + (i.wheel > 0 ? 1 : i.wheel < 0 ? 2 : 0) * 16384 * 5; }
@@ -239,6 +253,7 @@ ui.mainMenu();
 requestAnimationFrame(frame);
 window.__enoch = {
   get game() { return game; }, runlog, renderer, hud, audio, store, startRun, resume, ui,
+  get scene() { return scene; }, redraw() { frame.once = true; frame(last); frame.once = false; }, pause, openLog, toMenu, gameOver: () => { runTime = 754; gameOver(); },
   // test hook: advance the simulation n ticks with a fixed input, then render one frame
   advance(n, inp = {}) {
     for (let i = 0; i < n; i++) { game.step({ ...idleInput, ...inp }); pumpEvents(); renderer.update(game, T.dt, true); hud.update(game, T.dt); }

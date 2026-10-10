@@ -5,6 +5,8 @@ const KEY = 'enochNights.v1';
 const DEFAULTS = {
   musicVol: 0.7, sfxVol: 0.8, shake: 'full', flashing: 'full', hitStop: true, popups: true, damageNumbers: true,
   tutorial: true, colourBlind: false, godMode: false, keys: { ...DEFAULT_KEYS },
+  // Mobile & Touch PRD
+  layout: 'auto', touch: 'auto', touchSize: 'm', touchOpacity: 0.5, leftHanded: false, vibrate: true,
 };
 
 export const store = {

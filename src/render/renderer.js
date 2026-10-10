@@ -83,12 +83,26 @@ export class Renderer {
   // VA-1: the sim has no enemy ids, so each enemy gets a look seed (0..3) the first time it is drawn, round robin.
   lookOf(e) { const m = this.mem(e); if (m.look === undefined) m.look = (e.id ?? (this.lookSeq = (this.lookSeq || 0) + 1)) % 4; return m.look; }
   mem(o) { let m = this.fxMem.get(o); if (!m) { m = {}; this.fxMem.set(o, m); } return m; }
-  resize() {
+  resize(mode = 'desktop') {
+    if (mode === 'mobile') return this.resizeMobile();
     const s = Math.max(1, Math.floor(Math.min(window.innerWidth / VW, window.innerHeight / VH)));
     this.scale = s;
     for (const c of [this.screen]) { c.width = VW * s; c.height = VH * s; c.style.width = VW * s + 'px'; c.style.height = VH * s + 'px'; }
     this.sctx.imageSmoothingEnabled = false;
     return s;
+  }
+  // Mobile (PRD "Mobile rendering"): fill the safe area with a fractional scale, letterboxed to 16:9. The canvas
+  // holds one backing pixel per device pixel, so nearest-neighbour stays crisp; the returned scale is device px
+  // per logical px.
+  resizeMobile() {
+    const st = this.screen.parentElement, cs = getComputedStyle(st), n = (k) => parseFloat(cs[k]) || 0;
+    const aw = Math.max(1, st.clientWidth - n('paddingLeft') - n('paddingRight')), ah = Math.max(1, st.clientHeight - n('paddingTop') - n('paddingBottom'));
+    const css = Math.min(aw / VW, ah / VH), dpr = window.devicePixelRatio || 1;
+    const c = this.screen; c.width = Math.round(VW * css * dpr); c.height = Math.round(VH * css * dpr);
+    c.style.width = (c.width / dpr) + 'px'; c.style.height = (c.height / dpr) + 'px';
+    this.sctx.imageSmoothingEnabled = false;
+    this.scale = c.width / VW;
+    return this.scale;
   }
   setGame(g, keepCam = false) {
     if (this.mapRef !== g.map.tiles.length || !this.staticMap) { this.staticMap = buildStatic(g.map); this.mapRef = g.map.tiles.length; }

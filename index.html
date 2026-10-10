@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#15110c">
+  <link rel="manifest" href="manifest.webmanifest">
   <title>Last Night in Zion</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,6 +19,7 @@
     <canvas id="screen" width="960" height="540"></canvas>
     <div id="ui" class="ui"></div>
   </div>
+  <div id="rotate" class="rotate" hidden><div class="plaque"><div class="phone"></div><h1>Turn your phone</h1><p>Last Night in Zion plays in landscape. The game is paused.</p></div></div>
   <noscript>Last Night in Zion needs JavaScript.</noscript>
   <script type="module" src="src/main.js"></script>
 </body>

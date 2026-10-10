@@ -31,7 +31,7 @@ export class UI {
       const cur = i === this.sel ? ' sel' : '';
       let val = '';
       if (it.type === 'slider') { const v = it.get(); val = `<span class="bar">${'<i></i>'.repeat(Math.round(v * 10))}${'<b></b>'.repeat(10 - Math.round(v * 10))}</span>`; }
-      else if (it.type === 'toggle' || it.type === 'select') val = `<span class="val">${esc(it.get())}</span>`;
+      else if (it.type === 'toggle' || it.type === 'select') val = `<span class="val">${esc(it.show ? it.show() : it.get())}</span>`;
       else if (it.type === 'key') val = `<span class="key${this.capture === it ? ' wait' : ''}">${this.capture === it ? 'PRESS A KEY' : esc(keyLabel(it.get()))}</span>`;
       return `<li class="item ${it.type || 'button'}${cur}${it.primary ? ' primary' : ''}${it.danger ? ' danger' : ''}" data-i="${i}"><span class="lbl">${esc(it.label)}</span>${val}</li>`;
     }).join('');
@@ -166,6 +166,8 @@ export class UI {
       { label: 'Tutorial prompts', type: 'toggle', options: ['on', 'off'], get: () => (S.tutorial ? 'on' : 'off'), set: (v) => { S.tutorial = v === 'on'; if (S.tutorial) this.store.tut = {}; } },
       { label: 'God mode (unlimited everything)', type: 'toggle', options: ['off', 'on'], get: () => (S.godMode ? 'on' : 'off'), set: (v) => { S.godMode = v === 'on'; } },
       { label: 'Colour-blind assist', type: 'toggle', options: ['off', 'on'], get: () => (S.colourBlind ? 'on' : 'off'), set: (v) => { S.colourBlind = v === 'on'; document.body.classList.toggle('cb', S.colourBlind); } },
+      { label: 'Layout', type: 'select', options: ['auto', 'desktop', 'tablet', 'mobile'], get: () => S.layout, show: () => this.hooks.layout.label(), set: (v) => { S.layout = v; this.hooks.layout.update(); } },
+      { label: 'Touch controls', type: 'select', options: ['auto', 'always', 'off'], get: () => S.touch, set: (v) => { S.touch = v; this.hooks.layout.update(); } },
       { label: 'Fullscreen', action: () => this.hooks.fullscreen() },
       { label: 'Controls', action: () => this.controls() },
       { label: 'Back', action: () => this.pop() },
