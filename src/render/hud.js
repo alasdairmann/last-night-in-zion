@@ -1,7 +1,7 @@
 // HUD (PRD §25): Enoch plaques (near-black outline, olive body, light top lip, dark bottom lip, hard drop shadow),
 // Silkscreen numerals, Nunito labels. Drawn in logical 480x270 units at the integer scale so it stays pixel-perfect.
 import { T } from '../tuning.js';
-import { icon } from './sprites.js';
+import { iconHD } from './sprites.js';
 import { COMFORTS, FINDS, GUNS, MELEE, THROWS, COMFORT_INFO, EFFECTS, CONDITIONS, TRICKS, KEEPSAKES, PADDING, WEATHER, ITEMS, ROLES, ZONE_NAMES } from '../data.js';
 import { weaponName } from '../sim/game.js';
 import { FLOOR, WALL, BLD, DOOR, BAR, PROP } from '../map/town.js';
@@ -164,7 +164,7 @@ export class Hud {
     c.fillStyle = color; c.fillText(str, x, y);
   }
   measure(c, str, size, font = LBL, weight = '900') { c.font = `${weight} ${size}px ${font}`; return c.measureText(str).width; }
-  icon(c, key, x, y, scale = 1) { const im = icon(key); c.imageSmoothingEnabled = false; c.drawImage(im, x, y, im.width * scale, im.height * scale); }
+  icon(c, key, x, y, scale = 1) { const im = iconHD(key); c.imageSmoothingEnabled = false; c.drawImage(im, x, y, 14 * scale, 14 * scale); }
 
   // ---------- draw ----------
   draw(g, c, s, cam, opts = {}) {

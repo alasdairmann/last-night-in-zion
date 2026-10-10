@@ -4,6 +4,7 @@
 import { OUTFITS } from '../data.js';
 import { INK, RAMP, SKINS_DEAD, shade } from './palette.js';
 import { ICONS } from './icons.js';
+import { ICONS_HD, hdKit } from './icons_hd.js';
 import { drawHuman, drawBloater, drawBig, drawCrawler, drawDog, drawBiscuit, drawCorpse } from './people.js';
 export { shade };
 
@@ -302,4 +303,15 @@ export function iconWhite(key) {
   (ICONS[key?.replace('t:', '')] || ICONS.diamond)((x, y, w, h) => { r.fillStyle = '#e8e4d8'; r.fillRect(x, y, w, h); });
   cache.set(ck, raw); return raw;
 }
+// 28x28 double-resolution icon for surfaces drawn at screen scale (HUD, Zionpedia): same footprint as icon() at 2x.
+export function iconHD(key) {
+  if (key && key.startsWith('t:')) key = key.slice(2);
+  const ck = 'iconhd|' + key; let c = cache.get(ck); if (c) return c;
+  c = makeCanvas(28, 28); const o = c.getContext('2d'); o.imageSmoothingEnabled = false;
+  const f = ICONS_HD[key];
+  if (f) { const raw = makeCanvas(24, 24); f(hdKit(raw.getContext('2d'))); o.drawImage(outlined(shaded(raw)), 1, 1); }
+  else o.drawImage(icon(key), 0, 0, 28, 28);
+  cache.set(ck, c); return c;
+}
 export const hasIcon = (k) => !!ICONS[k];
+

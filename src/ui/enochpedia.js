@@ -8,7 +8,7 @@ import { trialTarget } from '../sim/nights.js';
 import { ERRANDS } from '../data/errands.js';
 import { Game } from '../sim/game.js';
 import { mapPOIs, paintTownMap, paintStreetNames } from './poi.js';
-import { icon, hasIcon, charSprite } from '../render/sprites.js';
+import { icon, iconHD, hasIcon, charSprite } from '../render/sprites.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const n = (v) => Number(v).toLocaleString('en-GB');
@@ -18,7 +18,7 @@ const strip = (h) => String(h).replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' '
 const _urls = new Map();
 // sprite icons are OffscreenCanvases, which can't make a data URL themselves
 function dataUrl(im) { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0); return c.toDataURL(); }
-const img = (key, cls = '') => { if (!hasIcon(key)) return ''; if (!_urls.has(key)) _urls.set(key, dataUrl(icon(key))); return `<img class="pi ${cls}" src="${_urls.get(key)}" alt="">`; };
+const img = (key, cls = '') => { if (!hasIcon(key)) return ''; if (!_urls.has(key)) _urls.set(key, dataUrl(iconHD(key))); return `<img class="pi ${cls}" src="${_urls.get(key)}" alt="">`; };
 // a character sprite (the dead, survivors) as a portrait
 function sprite(kind, outfit = 0) {
   const k = 'spr|' + kind + '|' + outfit;
