@@ -249,13 +249,13 @@ export class UI {
   // v1.4 F3: the Red Lion stash. Take a stored gun (it swaps with the one in its slot) or store one you carry
   stash(g) {
     const p = g.p, nm = (w) => `${CONDITIONS[w.cond ?? 1].name} ${weaponName(w)}`, items = [];
-    g.stash.forEach((w, i) => { const s = g.gunSlotFor(w.id), cls = g.gunClass(w.id) === 'primary' ? 1 : 2; items.push({ label: `Take ${nm(w)}${s === null && p.slots[cls] ? ` (swaps with your ${weaponName(p.slots[cls])})` : ''}`, primary: true, action: () => { g.stashTake(i); this.stash(g); } }); });
+    g.stash.forEach((w, i) => { const melee = w.kind === 'melee', s = melee ? null : g.gunSlotFor(w.id), cls = melee ? 0 : g.gunClass(w.id) === 'primary' ? 1 : 2; items.push({ label: `Take ${nm(w)}${s === null && p.slots[cls] ? ` (swaps with your ${weaponName(p.slots[cls])})` : ''}`, primary: true, action: () => { g.stashTake(i); this.stash(g); } }); });
     [1, 2, 3].forEach((i) => { const w = p.slots[i]; if (w) items.push({ label: `Store ${nm(w)}`, action: () => { g.stashStore(i); this.stash(g); } }); });
     items.push({ label: 'Back to the wave', action: () => this.hooks.resume() });
-    const armed = g.survivors.filter((s) => !s.dead && s.weapon);
-    const html = `<p>Guns you had no slot for wait here. At each break your survivors take the best ones to shoot from the windows.</p>${armed.length ? `<p>${armed.map((s) => `<b>${esc(s.name)}</b> has your ${esc(weaponName(s.weapon))}`).join(' &middot; ')}</p>` : ''}`;
+    const armed = g.survivors.filter((s) => !s.dead && (s.weapon || s.melee));
+    const html = `<p>The Red Lion's armoury. Weapons you had no slot for wait here. At each break your survivors take the best ones you aren't using: guns to shoot from the windows, blades and clubs to hold them.</p>${armed.length ? `<p>${armed.map((s) => `<b>${esc(s.name)}</b> has your ${esc(weaponName(s.weapon || s.melee))}`).join(' &middot; ')}</p>` : ''}`;
     const sel = this.top && this.top.stashScreen ? this.sel : 0;
-    this.show({ title: 'The stash', stashScreen: true, html, items, foot: 'W / S choose &middot; ENTER take or store &middot; ESC back', onBack: () => this.hooks.resume() });
+    this.show({ title: 'The armoury', stashScreen: true, html, items, foot: 'W / S choose &middot; ENTER take or store &middot; ESC back', onBack: () => this.hooks.resume() });
     this.sel = Math.min(sel, items.length - 1); this.highlight();
   }
   // fromPause: opened from the pause menu, so Back / ESC return there instead of to the wave
@@ -278,7 +278,7 @@ export class UI {
       <h3>Comforts vs Second Wind</h3><p>Comforts are permanent and take a slot. <b>Second Wind</b> (Hunt &amp; Tackle) gets you back up once and takes no slot. Going down never costs you a comfort.</p>
       <h3>Survivors</h3><p>Hurt survivors heal ${T.survivors.healPerRound} HP a wave (${T.heal.medicPerRound} with a Medic). Use a Bandages charge on one to heal ${T.heal.bandage} at once. Behind a bolted door they fight at double strength.</p>
       <h3>Biscuit</h3><p>Tap Z to send him, hold to make him stay. If he goes down, hold F by him. He heals between waves; the dog tin keepsake heals him fully.</p>
-      <h3>The safehouse</h3><p>The Red Lion's door starts broken: fix it to get in. Then hold F at it to bolt it (not with the dead close by). Nothing comes through a bolted door; the dead and Raiders must tear a window down, three times slower. Fit oak or steel shutters to its windows, from inside or out. With survivors home they bolt it behind you and let you back in. The stash is behind the bar.</p>
+      <h3>The safehouse</h3><p>The Red Lion's door starts broken: fix it to get in. Then hold F at it to bolt it, even with the dead at the door. Nothing comes through a bolted door; the dead and Raiders must tear a window down, three times slower. Fit oak or steel shutters to its windows, from inside or out. With survivors home they bolt it behind you and let you back in. The stash is behind the bar.</p>
       <h3>Cellar hatches</h3><p>One per zone, all broken at first. Fix the Red Lion's door, then the hatch in its cellar, then the hatches out in town. Hold F at a fixed hatch to drop in; Left / Right move between the other fixed hatches and "Stay" (the camera goes to look), F climbs out, Esc stays where you are. Hatches and the pub door won't work with the dead close by.</p>
       <h3>Traps and the switchboard</h3><p>Arm a trap and it fires itself when ${T.traps.armN}+ of the dead (or a special) are in it; you pay each firing. Wire the Town connects traps to a switchboard in the pub.</p>`;
     const notesHtml = this.notesHtml();
@@ -291,6 +291,7 @@ export class UI {
       { name: 'How to', html: howHtml },
       { name: 'Escape', html: g.escapeLog() ? `<table class="stats">${g.escapeLog().map((e) => row(`${e.done ? '&#10004;' : '&#9744;'} ${esc(e.text)}`)).join('')}</table>` : `<p>Nothing yet. Keep the lights on and survive to wave ${T.escape.unlockRound}.</p>` },
       { name: 'The Signal', html: g.signal.step === 0 ? '<p>Only static on the radio, for now.</p>' : `<table class="stats">${g.signalLog().map((s) => row(`${s.done ? '&#10004;' : '?'} ${esc(s.text === '?' ? 'Next step' : s.text)}`, esc(s.hint))).join('')}</table>` },
+      { name: 'Ellie\'s Bears', html: g.bearsLog() ? `<table class="stats">${g.bearsLog().map((e) => row(`${e.done ? '&#10004;' : '&#9744;'} ${esc(e.text)}`)).join('')}</table>${g.bears.step >= 5 ? '<p>The secret: Ellie hid her bears as a trail for her mum. Ruth Marsh followed it to you.</p>' : ''}` : '<p>There\'s a teddy bear by the war memorial with a name tag on it.</p>' },
       { name: 'Tapes', html: g.tapes.length ? g.tapes.map((i) => `<h3>${esc(TAPES[i].title)}</h3><p>${esc(TAPES[i].text)}</p>`).join('') : '<p>No tapes found. They glint in odd corners of town.</p>' },
       { name: 'Survivors', html: g.survivors.filter((s) => !s.dead).length || g.biscuit ? `<table class="stats">${g.survivors.filter((s) => !s.dead).map((s) => row(`${esc(s.name)}, ${s.age}`, `${s.role}${s.sick ? ' (sick)' : ''} ${Math.ceil(s.hp)}/${s.maxHp}`)).join('')}${g.biscuit ? row('Biscuit', g.biscuit.dead ? 'gone' : g.biscuit.down ? 'down!' : `${Math.ceil(g.biscuit.hp)}/${g.biscuit.maxHp}`) : ''}</table>` : '<p>Nobody yet.</p>' },
     ];

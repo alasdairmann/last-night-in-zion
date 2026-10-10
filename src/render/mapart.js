@@ -97,7 +97,7 @@ export function buildStatic(map) {
   { const f = map.spots.bbq; R(f.px - 6, f.py - 8, 12, 6, '#2f2f33'); R(f.px - 6, f.py - 8, 12, 1, '#4a4d52'); for (let i = 0; i < 5; i++) R(f.px - 5 + i * 2, f.py - 7, 1, 1, '#6f787d'); R(f.px - 5, f.py - 2, 1, 8, '#2f2f33'); R(f.px + 4, f.py - 2, 1, 8, '#2f2f33'); R(f.px + 7, f.py - 6, 4, 9, '#4d7fb8'); R(f.px + 7, f.py - 6, 1, 9, '#6a9ad0'); R(f.px + 8, f.py - 8, 2, 2, '#3a3a3e'); }
   // ---- props (D7) ----
   let carN = 0;
-  for (const p of map.props) prop(ctx, p, rng, p.kind === 'car' ? carN++ : 0);
+  for (const p of map.props) if (p.kind !== 'fireengine') prop(ctx, p, rng, p.kind === 'car' ? carN++ : 0); // v1.5 L1: the live engine sprite is the only fire engine
   for (const s of map.crateSpots) { const px = s.x * TS, py = s.y * TS; R(px + 1, py + 10, 14, 5, '#8f6a3e'); R(px + 1, py + 10, 14, 1, '#c49a62'); R(px + 1, py + 14, 14, 1, '#5a3e2a'); R(px + 3, py + 12, 2, 2, '#5a3e2a'); R(px + 11, py + 12, 2, 2, '#5a3e2a'); R(px + 7, py + 11, 1, 3, '#6b4a2e'); }
   for (const t of map.traps) trapProp(ctx, t, rng);
   // racks and comfort signs on facades

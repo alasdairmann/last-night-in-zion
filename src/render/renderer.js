@@ -188,6 +188,7 @@ export class Renderer {
       case 'teleport': for (let i = 0; i < 10; i++) this.smoke(ev.x + (R() - 0.5) * 24, ev.y + (R() - 0.5) * 24, 1, '#c8bf9a'); break;
       case 'screamWind': this.rings.push({ x: ev.x, y: ev.y - 14, t: 0, life: 1, r: 18, c: '#e03a2a' }); break;
       case 'engineStart': this.flash = Math.max(this.flash, 0.15); break;
+      case 'exhaust': for (let i = 0; i < 2; i++) this.smoke(ev.x, ev.y, 1.2, i ? '#8c8f86' : '#4a4d52'); if (ev.k > 0.2) this.smoke(ev.x + (Math.random() - 0.5) * 20, ev.y + 4, 0.7, '#a89070'); break; // v1.5 L2: exhaust and road dust
       case 'workshopDone': case 'workshopStart': for (let i = 0; i < 8; i++) this.spark(ev.x, ev.y + 4); break;
       case 'crateMoved': case 'crateClosed': for (let i = 0; i < 8; i++) this.smoke(ev.x + (R() - 0.5) * 16, ev.y, 1.2, '#c8bf9a'); break;
       case 'roundStart': for (const d of this.decals) d.fading = true; for (const sc of this.scorches) sc.fade = true; break;
@@ -362,13 +363,17 @@ export class Renderer {
     for (const b of g.bombs) list.push([b.y, 7, b]);
     list.push([g.map.generator.py + 7, 8, g.map.generator]);
     list.push([g.workshop.py + 14, 9, g.workshop]);
-    for (const s of g.survivors || []) if (!s.dead && inView(s.x, s.y)) list.push([lerp(s.oy, s.y, alpha), 11, s, lerp(s.ox, s.x, alpha)]);
-    if (g.biscuit && !g.biscuit.dead && inView(g.biscuit.x, g.biscuit.y)) list.push([lerp(g.biscuit.oy, g.biscuit.y, alpha), 12, g.biscuit, lerp(g.biscuit.ox, g.biscuit.x, alpha)]);
+    // v1.5 L4: riders on the engine's roof sort in front of it
+    const onRoof = (o) => g.escape && ((o.state === 'truck' && o.roof) || o.onTruck), roofY = g.escape ? lerp(g.escape.oey ?? g.escape.ey, g.escape.ey, alpha) + 11 : 0;
+    for (const s of g.survivors || []) if (!s.dead && inView(s.x, s.y)) { const y = lerp(s.oy, s.y, alpha); list.push([onRoof(s) ? roofY : y, 11, s, lerp(s.ox, s.x, alpha), y]); }
+    if (g.biscuit && !g.biscuit.dead && inView(g.biscuit.x, g.biscuit.y)) { const b = g.biscuit, y = lerp(b.oy, b.y, alpha); list.push([onRoof(b) ? roofY + 0.5 : y, 12, b, lerp(b.ox, b.x, alpha), y]); }
     for (const w of g.worldItems || []) if (inView(w.x, w.y)) list.push([w.y, 13, w]);
-    if (g.escape) list.push([g.escape.ey + 10, 14, g.escape]);
+    if (g.escape) { const E = g.escape, ex = lerp(E.oex ?? E.ex, E.ex, alpha), ey = lerp(E.oey ?? E.ey, E.ey, alpha); list.push([ey + 10, 14, E, ex, ey]); } // v1.5 L2: interpolated, so the drive is smooth at any frame rate
     if (g.dropCrate) list.push([g.dropCrate.y, 15, g.dropCrate]);
     for (const f of g.flags || []) list.push([f.y, 16, f]);
     for (const w of g.wrecks || []) if (inView(w.px, w.py, 60)) list.push([(w.ty + w.h) * TS, 17, w]);
+    { const f = g.map.spots.pub_flap_out; if (inView(f.px, f.py)) list.push([f.py - 8, 19, f]); } // v1.5 R8: the dog flap, drawn over the pub's front wall
+    for (const t of g.triggers || []) if (t.quiet) { const sp = g.spot(t.at); if (sp && inView(sp.px, sp.py)) list.push([sp.py + 4, 18, sp]); } // v1.5 W1: the spool of wire
     for (const t of g.traps) if (inView(t.px, t.py)) list.push([t.py + 7, 10, t]);
     list.sort((a, b) => a[0] - b[0]);
     const remaining = g.state === 'active' ? g.remaining() : 99;
@@ -385,12 +390,27 @@ export class Renderer {
         case 8: this.drawGenerator(v, g); break;
         case 9: this.drawWorkshop(v, g); break;
         case 10: this.drawTrapSwitch(v, g, it[2]); break;
-        case 11: this.drawSurvivor(v, g, it[2], it[3], it[0]); break;
-        case 12: this.drawBiscuit(v, g, it[2], it[3], it[0]); break;
+        case 11: this.drawSurvivor(v, g, it[2], it[3], it[4] ?? it[0]); break;
+        case 12: this.drawBiscuit(v, g, it[2], it[3], it[4] ?? it[0]); break;
         case 13: this.drawWorldItem(v, it[2]); break;
-        case 14: this.drawEngine(v, g, it[2]); break;
+        case 14: this.drawEngine(v, g, it[2], it[3], it[4]); break;
         case 15: { const d = it[2], drop = Math.max(0, 1 - d.t / 2) * 120; v.fillStyle = 'rgba(0,0,0,0.3)'; v.fillRect(Math.round(d.x) - 7, Math.round(d.y), 14, 3); if (drop > 0) { v.fillStyle = '#e8dfc6'; v.fillRect(Math.round(d.x) - 10, Math.round(d.y - drop - 26), 20, 8); v.fillStyle = '#8c8f86'; v.fillRect(Math.round(d.x), Math.round(d.y - drop - 18), 1, 8); } v.drawImage(icon('supplies'), Math.round(d.x) - 7, Math.round(d.y - drop) - 12); break; }
         case 17: { const w = it[2]; this.drawBus(v, { x: w.px, y: w.py }); break; }
+        case 19: { // a low dark gap in the Red Lion's wall with a rubber flap, just big enough for Biscuit
+          const f = it[2], x = Math.round(f.px) - 5, y = Math.round(f.py) - 9;
+          v.fillStyle = '#6b4a2e'; v.fillRect(x - 1, y - 1, 12, 1); v.fillStyle = '#120e0a'; v.fillRect(x, y, 10, 7);
+          const sw = g.biscuit && Math.hypot(g.biscuit.x - f.px, g.biscuit.y - f.py) < 24 ? 1 : 0; v.fillStyle = '#2a2420'; v.fillRect(x + 1, y + sw, 8, 4); v.fillStyle = '#3a3430'; v.fillRect(x + 1, y + sw, 8, 1);
+          break;
+        }
+        case 18: { // a cable spool on its side, with a pulsing amber glow so it reads as something to use
+          const sp = it[2], x = Math.round(sp.px), y = Math.round(sp.py);
+          v.globalAlpha = 0.3 + 0.15 * Math.sin(this.time * 4); this.pixelCircle(v, x, y, 9, '#e2b53c'); v.globalAlpha = 1;
+          v.fillStyle = 'rgba(0,0,0,0.3)'; v.fillRect(x - 7, y + 4, 14, 3);
+          v.fillStyle = '#6b4a2e'; v.fillRect(x - 7, y - 7, 3, 12); v.fillRect(x + 4, y - 7, 3, 12);
+          v.fillStyle = '#b5502b'; v.fillRect(x - 4, y - 5, 8, 8); v.fillStyle = '#d9822b'; for (let i = 0; i < 4; i++) v.fillRect(x - 4, y - 4 + i * 2, 8, 1);
+          v.fillStyle = '#8f6a3e'; v.fillRect(x - 7, y - 7, 3, 1); v.fillRect(x + 4, y - 7, 3, 1); v.fillStyle = '#c8b060'; v.fillRect(x + 4, y + 1, 5, 1);
+          break;
+        }
         case 16: { const f = it[2]; v.fillStyle = '#8f6a3e'; v.fillRect(Math.round(f.x), Math.round(f.y) - 20, 1, 20); v.fillStyle = Math.floor(this.time * 4) % 2 ? '#4d7fb8' : '#3d6a9a'; v.fillRect(Math.round(f.x) + 1, Math.round(f.y) - 20, 8, 5); this.pixelCircleOutline(v, f.x, f.y, 40, 'rgba(77,127,184,0.5)'); break; }
       }
     }
@@ -682,9 +702,10 @@ export class Renderer {
   }
   // D7 fire engine: a red cab-forward pump with a white roof stripe, ladder, rolled hose, chrome lockers and a blue
   // light bar. Missing parts show (battery bay open, a wheel on blocks, fuel cap off) and fill in as they're fitted.
-  drawEngine(v, g, E) {
-    const x = Math.round(E.ex) - 32, y = Math.round(E.ey) - 18;
-    const R = (a, b, w, h, c) => { v.fillStyle = c; v.fillRect(x + a, y + b, w, h); };
+  drawEngine(v, g, E, ex = E.ex, ey = E.ey) {
+    const x = Math.round(ex) - 32, y = Math.round(ey) - 18, flip = (E.dir || 1) < 0;
+    // v1.5 L2: facing the way it drives (mirrored about its centre)
+    const R = (a, b, w, h, c) => { v.fillStyle = c; v.fillRect(flip ? x + 64 - a - w : x + a, y + b, w, h); };
     const going = E.stage === 'gone', ready = E.stage === 'drive' || going, fit = E.fitted || {};
     R(2, 30, 60, 4, 'rgba(0,0,0,0.35)');
     R(0, 6, 64, 24, '#2b1d16'); R(1, 7, 62, 22, '#b5302a'); R(1, 7, 62, 3, '#d84a3a'); R(1, 22, 62, 2, '#7a1a16');
@@ -706,7 +727,13 @@ export class Renderer {
     R(22, 1, 14, 3, '#2a3440');
     if (ready) { const f = Math.floor(this.time * 9) % 3; for (let i = 0; i < 3; i++) R(23 + i * 4, 1, 3, 2, i === f ? '#9ad0ff' : '#3d6ad0'); }
     else for (let i = 0; i < 3; i++) R(23 + i * 4, 1, 3, 2, '#2a4a8a');
-    if (ready && Math.random() < 0.4) this.smoke(x + 2, y + 24, 0.8, '#4a4d52');
+    if (ready && Math.random() < 0.4) this.smoke(flip ? x + 62 : x + 2, y + 24, 0.8, '#4a4d52');
+    if (going) { // wheels turning (a hub spoke steps round), and a headlight beam ahead of the cab
+      const sp = Math.floor((E.driveT || 0) * 14) % 4, hub = [[0, 0], [2, 0], [2, 2], [0, 2]][sp];
+      for (const wx of [9, 49]) R(wx + hub[0], 28 + hub[1], 2, 1, '#c8cfd0');
+      v.globalAlpha = 0.18; v.fillStyle = '#fff2b0'; const hx = flip ? x - 40 : x + 64; v.fillRect(hx, y + 14, 40, 12); v.globalAlpha = 1;
+      R(62, 15, 2, 3, '#fff2b0');
+    }
   }
   drawBus(v, w) { // town event: a green double-decker through the fence, windows broken
     const x = Math.round(w.x) - 40, y = Math.round(w.y) - 30, R = (a, b, ww, hh, c) => { v.fillStyle = c; v.fillRect(x + a, y + b, ww, hh); };

@@ -1,11 +1,11 @@
 // Survivors and the Red Lion safe house (ENHANCEMENT-PRD §9), plus the escort NPC used by errands (§5.3 Escort).
 import { T } from '../tuning.js';
-import { ROLES, SURVIVOR_NAMES, SURVIVOR_LINES, OUTFITS, GUNS } from '../data.js';
+import { ROLES, SURVIVOR_NAMES, SURVIVOR_LINES, OUTFITS, GUNS, MELEE } from '../data.js';
 import { nextStep } from '../nav.js';
 
 const DT = T.dt;
 const hyp = Math.hypot;
-const HOMES = [[6, 48], [8, 46], [11, 48], [13, 46]];
+const HOMES = [[6, 48], [8, 46], [11, 48], [13, 46], [6, 46], [10, 46]]; // v1.5 R9: room for six
 
 export const SurvivorMixin = {
   initSurvivors() {
@@ -58,6 +58,12 @@ export const SurvivorMixin = {
 
   survivorsRoundStart(r) {
     const p = this.p;
+    // v1.5 R9: survivors find their own way to the Red Lion too, so a run can reach 4-6 of them
+    const A = T.survivorArrive, alive = this.survivors.filter((s) => !s.dead).length;
+    if (this.pubDoorFixed && r >= A.from && alive < T.survivors.max && r - (this.lastArrival ?? -99) >= A.every && this.rng.next() < A.chance) {
+      this.lastArrival = r;
+      this.queueMajor(() => { const d = this.map.pub.door; if (this.survivors.filter((s) => !s.dead).length < T.survivors.max) { this.rescueDirect(d.x, d.y); this.radio('Someone just banged on the Red Lion door. We let them in.', 'Hilltop'); } });
+    }
     for (const s of this.homeSurvivors()) {
       if (s.hp < s.maxHp) s.hp = Math.min(s.maxHp, s.hp + (this.hasRole('medic') ? T.heal.medicPerRound : T.survivors.healPerRound)); // v1.2 B12
       if (s.sick > 0) {
@@ -93,8 +99,8 @@ export const SurvivorMixin = {
   // friendlies the dead will go for
   friendlies() {
     const out = [];
-    for (const s of this.survivors) if (!s.dead) out.push(s);
-    if (this.biscuit && !this.biscuit.dead) out.push(this.biscuit);
+    for (const s of this.survivors) if (!s.dead && s.state !== 'truck') out.push(s); // v1.5 L4: riders on the engine are out of reach
+    if (this.biscuit && !this.biscuit.dead && !this.biscuit.onTruck && !this.biscuit.toTruck) out.push(this.biscuit);
     return out;
   },
 
@@ -117,12 +123,14 @@ export const SurvivorMixin = {
       s.ox = s.x; s.oy = s.y; s.moving = false; s.animT += DT;
       if (s.flash > 0) s.flash--;
       if (s.dead) continue;
-      if (s.state === 'escort') this.escortAI(s);
+      if (s.state === 'truck') this.truckAI(s);
+      else if (s.state === 'escort') this.escortAI(s);
       else if (s.weapon && this.survivorShoot(s)) { /* v1.4 F1/F5: shooting from inside */ }
       else if (pubThreat) this.survivorFight(s);
+      else if (s.state === 'home' && this.inPub(s.x, s.y) && this.survivorDefend(s)) { /* v1.5 R2: stab through the window */ }
       else if (s.home && hyp(s.x - s.home.x, s.y - s.home.y) > 2) this.npcStep(s, s.home.x, s.home.y, 40, null);
     }
-    for (const s of this.survivors) if (s.dead && s.weapon) { this.stash.push(s.weapon); s.weapon = null; } // their gun goes back in the stash
+    for (const s of this.survivors) if (s.dead && (s.weapon || s.melee)) { for (const k of ['weapon', 'melee']) if (s[k]) { this.stash.push(s[k]); s[k] = null; } } // their gun goes back in the stash
     if (this.survivors.some((s) => s.dead && (s.gone || s.state !== 'escort'))) this.survivors = this.survivors.filter((s) => !s.dead);
     this.autoBolt();
   },
@@ -149,13 +157,39 @@ export const SurvivorMixin = {
       }
     }
   },
+  // v1.5 R2: a survivor at home goes to the window (or door) the dead are hitting and stabs through it.
+  // Each one adds its own damage, so three or more hold the pub without you.
+  survivorDefend(s) {
+    let best = null, bd = 1e9;
+    for (const e of this.enemies) {
+      if (e.dead || e.ally > 0) continue;
+      const atWin = e.state === 'outside' && e.bar && e.bar.safe, atDoor = e.state === 'inside' && !this.inPub(e.x, e.y) && hyp(e.x - this.map.pub.door.x, e.y - this.map.pub.door.y) < T.pubDefend.doorR;
+      if (!atWin && !atDoor) continue;
+      const d = hyp(e.x - s.x, e.y - s.y); if (d < bd) { bd = d; best = e; }
+    }
+    if (!best) return false;
+    const post = best.bar ? best.bar.inside : { x: this.map.spots.pub_in.px, y: this.map.spots.pub_in.py };
+    // spread out: the nth defender stands a little to the side
+    if (hyp(post.x - s.x, post.y - s.y) > T.pubDefend.reach - 6) { this.npcStep(s, post.x, post.y, 40, null); return true; }
+    s.fx = (best.x - s.x) / (bd || 1); s.fy = (best.y - s.y) / (bd || 1);
+    s.atkCD -= DT;
+    if (s.atkCD <= 0 && bd < T.pubDefend.reach * 2.2) { // through the window: the frame is ~2 tiles deep
+      s.atkCD = T.survivors.attackEvery;
+      const dmg = Math.max(s.role === 'fighter' ? T.survivors.fighterDmg : T.survivors.dmg, s.melee ? this.survivorMeleeDmg(s.melee) : 0) * T.pubDefend.dmgMult * (this.boltedIn(s) ? T.pubRaid.survivorMult : 1);
+      this.damageEnemy(best, dmg, { kind: 'survivor', x: s.x, y: s.y, noHitScrap: true, noScrap: true });
+      this.emit('survivorSwing', { x: s.x, y: s.y });
+    }
+    return true;
+  },
+  // a survivor's swing with a weapon from the pub inventory: a third of yours (they're not you)
+  survivorMeleeDmg(w) { return MELEE[w.id].dmg * T.pubDefend.meleeShare * this.condMult(w) * (1 + 0.5 * (w.tier || 0)); },
   // ---------- v1.4 F1: survivors bolt the door behind you, and open it when you come back ----------
   autoBolt() {
     const p = this.p, d = this.map.pub.door, A = T.autoBolt, inPub = this.inPub(p.x, p.y), dd = hyp(p.x - d.x, p.y - d.y);
     const home = this.homeSurvivors().some((s) => this.inPub(s.x, s.y));
     if (!home || !this.pubDoorFixed || p.dead) { this.pubWasIn = inPub; return; }
     if (dd > A.rearm) this.boltRearmed = true;
-    if (!this.pubShut && this.pubWasIn && !inPub && dd > A.leave && !this.zedsNear(d.x, d.y, 12) && ![p, ...this.friendlies()].some((o) => hyp(o.x - d.x, o.y - d.y) < 12)) {
+    if (!this.pubShut && !inPub && ((this.pubWasIn && dd > A.leave) || dd > A.rearm) && ![p, ...this.friendlies()].some((o) => hyp(o.x - d.x, o.y - d.y) < 12)) {
       this.setPubShut(true, true); this.boltRearmed = false;
       this.card({ key: 'pub.autobolt', text: 'THEY BOLTED THE DOOR BEHIND YOU', sub: 'Come back and they\'ll let you in' });
     } else if (this.pubShut && !inPub && this.boltRearmed && dd < A.approach && !this.zedsNear(d.x, d.y, A.clearR)) {
@@ -170,6 +204,10 @@ export const SurvivorMixin = {
     const score = (w) => GUNS[w.id].dmg * GUNS[w.id].pellets * GUNS[w.id].rpm * this.condMult(w) * (1 + (w.tier || 0));
     const guns = this.stash.filter((w) => w.kind === 'gun' && w.id !== 'blowtorch').sort((a, b) => score(b) - score(a));
     for (const s of home) { const w = guns.shift(); if (!w) break; this.stash.splice(this.stash.indexOf(w), 1); s.weapon = w; }
+    // v1.5 I3: the rest take the best blade or club from the pub inventory for the windows
+    for (const s of home) if (s.melee) { this.stash.push(s.melee); s.melee = null; }
+    const blades = this.stash.filter((w) => w.kind === 'melee').sort((a, b) => this.survivorMeleeDmg(b) - this.survivorMeleeDmg(a));
+    for (const s of home) { if (s.weapon) continue; const w = blades.shift(); if (!w) break; this.stash.splice(this.stash.indexOf(w), 1); s.melee = w; }
   },
   // a clear shot from the pub: windows and the door don't block it
   pubShotClear(x0, y0, x1, y1) {

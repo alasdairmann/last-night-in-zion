@@ -96,7 +96,7 @@ export const CoreMixin = {
         this.emit('pickupItem', { item: wi.item, x: wi.x, y: wi.y });
         return;
       case 'weapon':
-        wi.done = true; this.giveItem(wi.weapon, wi.cond); this.emit('pickupItem', { item: wi.weapon, x: wi.x, y: wi.y }); return;
+        wi.done = true; this.giveItem(wi.weapon, wi.cond, true); this.emit('pickupItem', { item: wi.weapon, x: wi.x, y: wi.y }); return;
       default:
         wi.done = true;
         if (wi.on) this['take_' + wi.on](wi);
@@ -154,7 +154,7 @@ export const CoreMixin = {
     this.companionInteractables(out);
     this.gearInteractables(out);
     this.questInteractables(out);
-    this.escapeInteractables(out);
+    this.escapeInteractables(out); this.bearsInteractables(out);
     this.nightsInteractables(out);
     this.safehouseInteractables(out);
     return out;
@@ -169,19 +169,19 @@ export const CoreMixin = {
     if (wi.kind === 'weapon') {
       const def = MELEE[wi.weapon] || GUNS[wi.weapon];
       const c = CONDITIONS[wi.cond ?? 1];
-      const sw = this.swapHold(wi.weapon, wi.cond ?? 1);
-      return { label: `Take ${c.name} ${def.name}`, cost: 0, holdTime: sw ? sw.holdTime : T.hold.take, action: () => this.takeWorldItem(wi), sub: sw ? sw.sub : this.replaceText(wi.weapon), warn: !!sw };
+      return { label: `Take ${c.name} ${def.name}`, cost: 0, holdTime: T.hold.take, action: () => this.takeWorldItem(wi), sub: this.replaceText(wi.weapon, true) };
     }
     if (wi.desc) return this['desc_' + wi.desc](wi);
     return { label: `Take the ${name}`, cost: wi.cost || 0, holdTime: wi.holdTime || 0.3, action: () => this.takeWorldItem(wi), sub: wi.sub || '' };
   },
   // which slot a weapon lands in, said plainly (v1.1 feedback: make slot replacement obvious)
-  replaceText(id) {
+  replaceText(id, found = false) {
     const p = this.p;
+    if (found && MELEE[id] && p.slots[0]) return 'Melee slot full: send to pub inventory'; // v1.5 I2
     if (id.startsWith('t:')) { const cur = p.throwable; return `Pocket (G): replaces ${cur.count ? cur.id === 'brick' ? 'your bricks' : 'your ' + cur.id : 'nothing'}`; }
     if (MELEE[id]) return p.slots[0] ? `Melee slot 1: replaces ${this.weaponLabel(p.slots[0])}` : 'Melee slot 1';
     const s = this.gunSlotFor(id), cls = this.gunClass(id) === 'primary' ? 'Primary' : 'Secondary';
-    return s === null ? `${cls} slot full: it goes to the Red Lion stash` : `${s === 3 ? 'Pack Mule' : cls} slot ${s + 1} (empty)`;
+    return s === null ? `${cls} slot full: send to pub inventory` : `${s === 3 ? 'Pack Mule' : cls} slot ${s + 1} (empty)`;
   },
   // v1.2 B6: replacing an upgraded or better-condition weapon needs a 1 s hold and an amber warning
   swapHold(id, cond = 1) {
@@ -216,7 +216,7 @@ export const CoreMixin = {
         else opts.push({ label: `Padding: ${PADDING[n].name}`, cost: T.padding.costs[n], holdTime: T.hold.comfort, action: () => this.buyPadding(), sub: `Layer ${n + 1}: soaks 75% of damage. Repairs all layers` });
       }
     }
-    if (b.padding && p.padLayers > 0 && p.pad.some((v, i) => i < p.padLayers && v < T.padding.pointsPerLayer)) opts.push({ label: 'Patch padding', cost: T.padding.scrapRepair, holdTime: 0.5, action: () => this.patchPadding(), sub: `+${T.padding.partRepair} to the most worn layer` });
+    if (b.padding && p.padLayers > 0 && p.pad.some((v, i) => i < p.padLayers && v < T.padding.pointsPerLayer)) opts.push({ label: 'Patch padding', cost: T.padding.scrapRepair, holdTime: 0.5, action: () => this.patchPadding(), repeat: true, sub: `+${T.padding.partRepair} to the most worn layer. Hold to keep patching` }); // v1.5 H1
     // Condition (§13.2)
     const w = this.curWeapon();
     if (b.weapons && w && !p.lastChance && w.id !== 'blowtorch') {
@@ -267,7 +267,7 @@ export const CoreMixin = {
     const e = this.errandObjective(); if (e) return e;
     // v1.4 A4: no automatic pointer to the fire engine; pin it from Notes if you want one
     const h = this.cellarTask(); if (h) return h;
-    return null;
+    return this.bearObjective(); // v1.5: Ellie's Bears
   },
 };
 

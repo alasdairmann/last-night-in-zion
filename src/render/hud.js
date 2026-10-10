@@ -80,6 +80,9 @@ export class Hud {
     const C = T.cards, key = c.key || `${c.text}|${c.sub || ''}`, now = this.time;
     const live = this.cards.find((o) => o.key === key && !o.gone);
     if (live && (live.prio === 'critical' || c.update)) { Object.assign(live, { text: c.text, sub: c.sub, pin: c.pin || live.pin, code: c.code }); live.flash = 0.4; this.note(g, c.sub ? `${c.text}: ${c.sub}` : c.text, live.prio === 'critical' ? 'danger' : c.prio, { pin: live.pin, code: c.code }); return; }
+    // v1.5 P2: repeats of a low-priority message fold into the live card (x2, x3) instead of stacking
+    const same = (c.prio || 'info') === 'info' && this.cards.find((o) => o.prio === 'info' && o.text === c.text && !o.gone && o.t < o.life - 0.3);
+    if (same) { same.n = (same.n || 1) + 1; same.sub = c.sub || same.sub; same.t = Math.min(same.t, 0.15); same.flash = 0.3; return; }
     if (now - (this.cardSeen.get(key) ?? -99) < C.dedupe) return;
     this.cardSeen.set(key, now);
     const card = { key, text: c.text, sub: c.sub || '', prio: c.prio || 'info', danger: !!c.danger || c.prio === 'critical', pin: c.pin || null, code: c.code || null, find: c.find, t: 0, life: c.prio === 'critical' ? C.critical : c.prio === 'objective' ? C.objective : C.info + (c.danger ? 2 : 0) };
@@ -231,6 +234,7 @@ export class Hud {
       this.drawTracker(c, g, this.drawCards(c, g, 6 + rows.length * 20));
     }
     this.drawBottomLeft(c, g);
+    this.drawCritical(c, g);
     this.drawWeapons(c, g);
 
     // centre: round start, banners, downed timer, tutorial
@@ -433,7 +437,8 @@ export class Hud {
   drawCards(c, g, y0) {
     const C = this.C, w = 150, x = VW - w - 6, M = T.cards.max; let y = y0;
     this.cardRects = [];
-    const show = [...this.cards.filter((o) => o.prio === 'critical'), ...this.cards.filter((o) => o.prio !== 'critical')].slice(0, M), more = this.cards.length - show.length;
+    // v1.5 P2: critical cards leave the feed for the centre banner (drawCritical)
+    const rest = this.cards.filter((o) => o.prio !== 'critical'), show = rest.slice(0, M), more = rest.length - show.length;
     for (const cd of show) {
       const a = Math.max(0, Math.min(1, cd.t / 0.15, (cd.life - cd.t) / 0.3)), slide = Math.round((1 - Math.min(1, cd.t / 0.15)) * 20);
       const sub = cd.sub ? this.wrap(c, cd.sub, w - 12 - (cd.code ? 30 : 0), 6) : [], h = 12 + sub.length * 8 + (cd.code ? 2 : 0);
@@ -444,7 +449,7 @@ export class Hud {
       else if (cd.prio === 'objective') { c.fillStyle = '#a8e070'; c.fillRect(x + slide, y, 2, h); }
       if (cd.flash > 0) { c.fillStyle = `rgba(255,255,255,${cd.flash})`; c.fillRect(x + slide, y, w, h); }
       if (cd.find) this.icon(c, cd.find, x + slide + w - 18, y + 1);
-      this.text(c, cd.text, x + slide + 6, y + 2, { size: 7, color: cd.prio === 'critical' || cd.danger ? C.cream : cd.prio === 'objective' ? '#c8f0a0' : C.amber });
+      this.text(c, cd.n > 1 ? `${cd.text} x${cd.n}` : cd.text, x + slide + 6, y + 2, { size: 7, color: cd.prio === 'critical' || cd.danger ? C.cream : cd.prio === 'objective' ? '#c8f0a0' : C.amber });
       sub.forEach((l, i) => this.text(c, l, x + slide + 6, y + 11 + i * 8, { size: 6, color: C.khaki }));
       if (cd.code) { const cw = this.measure(c, cd.code, 7, NUM, '400') + 6, cx = x + slide + w - cw - 4; c.fillStyle = '#120e0a'; c.fillRect(cx, y + 10, cw, 10); c.fillStyle = C.amber; c.fillRect(cx, y + 10, cw, 1); this.text(c, cd.code, cx + 3, y + 11, { font: NUM, weight: '400', size: 7, color: '#fff2b0', shadow: false }); }
       if (cd.prio === 'critical') this.text(c, 'x', x + slide + w - 6, y + 1, { size: 6, color: C.khaki, align: 'right' });
@@ -454,6 +459,22 @@ export class Hud {
     }
     if (more > 0) { this.plaque(c, x + w - 26, y, 26, 10); this.text(c, `+${more}`, x + w - 13, y + 1, { font: NUM, weight: '400', size: 6, align: 'center', color: C.khaki }); y += 14; }
     return y + 2;
+  }
+  // v1.5 P2: the newest critical card as a centre banner under the wave number; click it (or resolve it) to clear
+  drawCritical(c, g) {
+    const C = this.C, cd = this.cards.find((o) => o.prio === 'critical'); if (!cd) return;
+    const others = this.cards.filter((o) => o.prio === 'critical').length - 1;
+    const w = 220, mid = Math.round((58 + VW - 162) / 2), x = mid - w / 2, y = 22, sub = cd.sub ? this.wrap(c, cd.sub, w - 16, 6) : [], h = 14 + sub.length * 8;
+    const a = Math.max(0, Math.min(1, cd.t / 0.15, (cd.life - cd.t) / 0.3)), pop = Math.round((1 - Math.min(1, cd.t / 0.2)) * 6);
+    c.globalAlpha = a;
+    this.plaque(c, x - pop, y - pop, w + pop * 2, h + pop * 2, { body: '#5a2620' });
+    c.fillStyle = Math.floor(this.time * 3) % 2 || cd.t > 3 ? C.red : '#ff8a70'; c.fillRect(x - pop, y - pop, 3, h + pop * 2); c.fillRect(x + w + pop - 3, y - pop, 3, h + pop * 2);
+    if (cd.flash > 0) { c.fillStyle = `rgba(255,255,255,${cd.flash})`; c.fillRect(x, y, w, h); }
+    this.text(c, cd.n > 1 ? `${cd.text} x${cd.n}` : cd.text, mid, y + 3, { size: 8, align: 'center', color: C.cream });
+    sub.forEach((l, i) => this.text(c, l, mid, y + 13 + i * 8, { size: 6, align: 'center', color: C.khaki }));
+    this.text(c, others > 0 ? `+${others}  x` : 'x', x + w - 6, y + 1, { size: 6, color: C.khaki, align: 'right' });
+    c.globalAlpha = 1;
+    this.cardRects.push({ x, y, w, h, card: cd });
   }
   drawTracker(c, g, y0) {
     const C = this.C; let y = y0;
@@ -530,8 +551,13 @@ export class Hud {
       for (let i = 0; i < 3; i++) { c.fillStyle = col; c.fillRect(Math.round(ax + Math.cos(a) * (9 + i * 2)) - 2 + i, Math.round(ay + Math.sin(a) * (9 + i * 2)) - 2 + i, 4 - i * 2 || 1, 4 - i * 2 || 1); }
     };
     if (o) arrow(o.x, o.y, '#6cbf4a');
+    // v1.5 P2: every critical card points the way (the Looter's follows him)
+    for (const cd of this.cards) if (cd.prio === 'critical' && cd.t < cd.life - 0.3) {
+      const lo = cd.key === 'looter' && g.enemies.find((e) => !e.dead && e.type === 'looter'), at = lo || cd.pin;
+      if (at) arrow(at.x, at.y, '#e03a2a', '!');
+    }
     if (this.pin) arrow(this.pin.x, this.pin.y, '#e2b53c', 'PIN'); // v1.4 A2/A4: a note you pinned
-    for (const tr of g.triggers || []) { const sp = g.spot(tr.at); if (sp) arrow(sp.px, sp.py, '#e2b53c', '?'); }
+    for (const tr of g.triggers || []) { const sp = g.spot(tr.at); if (sp && (!tr.quiet || g.inPub(g.p.x, g.p.y))) arrow(sp.px, sp.py, '#e2b53c', '?'); } // v1.5 W1: the spool only points when you're in the pub
     const ev = g.eventTarget && g.eventTarget(); if (ev && !o) arrow(ev.x, ev.y, '#e2b53c');
     // the last straggler: a red triangle at the screen edge pointing the way, once it's the only one left and off screen
     const last = g.lastEnemy && g.lastEnemy();

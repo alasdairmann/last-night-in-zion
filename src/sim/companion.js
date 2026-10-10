@@ -27,6 +27,9 @@ export const CompanionMixin = {
     const mx = this.biscuitMaxHp(); if (mx > b.maxHp) { b.hp += mx - b.maxHp; b.maxHp = mx; }
     if (b.flash > 0) b.flash--;
     if (this.state === 'break' && b.hp < b.maxHp && !b.down) b.hp = Math.min(b.maxHp, b.hp + T.heal.biscuitBreak * DT); // v1.2 B12: he heals over the break
+    // v1.5 L4: hurt in the last stand he jumps up on the engine and stays there
+    if (b.onTruck) { if (this.escape.stage !== 'gone') { const st = this.truckSeat(5); b.x = st.x; b.y = st.y; } return; }
+    if (b.toTruck) { const E = this.escape; b.down = false; if (hyp(E.ex - b.x, E.ey + 20 - b.y) < 24) { b.onTruck = true; b.toTruck = false; this.emit('woof', { x: b.x, y: b.y }); this.bark(null, true, 'Up you get, boy.'); } else this.dogMove(b, E.ex, E.ey + 20, T.biscuit.speed, this.lureField({ id: 'engine', x: E.ex, y: E.ey + 20 })); return; }
     if (b.down) return;
     b.biteCD -= DT; b.barkT -= DT; b.noiseT -= DT;
     // bark at specials, even in the dark (§10.3)
@@ -56,7 +59,7 @@ export const CompanionMixin = {
       b.fx = (tgt.x - b.x) / (d || 1); b.fy = (tgt.y - b.y) / (d || 1);
       if (d < tgt.r + 7) { if (b.biteCD <= 0) this.biscuitBite(tgt); }
       else this.dogMove(b, tgt.x, tgt.y, T.biscuit.speed, null);
-      if (b.noiseT <= 0) { b.noiseT = 3; this.emitNoise('medium', b.x, b.y); this.emit('woof', { x: b.x, y: b.y }); }
+      if (b.noiseT <= 0) { b.noiseT = 3; this.emit('woof', { x: b.x, y: b.y }); } // v1.5 Z2: his barking no longer draws the dead
       return;
     }
     if (b.mode === 'stay') { if (hyp(b.stay.x - b.x, b.stay.y - b.y) > 3) this.dogMove(b, b.stay.x, b.stay.y, T.biscuit.speed * 0.6, null); return; }
@@ -65,6 +68,12 @@ export const CompanionMixin = {
     if (d > 4) this.dogMove(b, tx, ty, d > 60 ? T.biscuit.speed : Math.min(T.biscuit.speed, 40 + d * 2), d > 30 ? this.field : null);
   },
   dogMove(b, tx, ty, speed, field) {
+    // v1.5 R8: a dog flap in the Red Lion's back wall. Only Biscuit fits; it doesn't care if the door is bolted
+    if (this.pubShut && this.pubDoorFixed && this.inPub(tx, ty) !== this.inPub(b.x, b.y)) {
+      const S = this.map.spots, inside = this.inPub(b.x, b.y), near = inside ? S.pub_flap_in : S.pub_flap_out, far = inside ? S.pub_flap_out : S.pub_flap_in;
+      if (hyp(near.px - b.x, near.py - b.y) < 6) { b.x = b.ox = far.px; b.y = b.oy = far.py; this.emit('dogFlap', { x: b.x, y: b.y }); return; }
+      tx = near.px; ty = near.py; field = inside ? null : this.lureField({ id: 'flap', x: near.px, y: near.py });
+    }
     let mx = tx - b.x, my = ty - b.y; const d = hyp(mx, my);
     if (d > 18) { const st = nextStep(this.W, this.H, this.walk, field || this.field, Math.floor(b.x / 16), Math.floor(b.y / 16)); if (st && (field || !this.lineClear(b.x, b.y, tx, ty))) { mx = st.x - b.x; my = st.y - b.y; } }
     const md = hyp(mx, my); if (md < 0.3) return;

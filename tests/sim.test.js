@@ -390,15 +390,126 @@ test('B5: Q/E never change the weapon slot', () => {
   assert.equal(g.p.cur, c0);
   g.step(inp({ wheel: 1 })); assert.notEqual(g.p.cur, c0);
 });
-test('B6: an interact hold cannot swap out a tier-3 weapon in under 1 s', () => {
+test('v1.5 I2: a found melee weapon goes to the stash, never replacing yours; swap it at the bar', () => {
   const g = fresh(); quiet(g);
   g.p.slots[0] = g.makeWeapon('bat'); g.p.slots[0].tier = 3; g.p.cur = 0;
   const wi = g.addWorldItem({ item: 'weapon', kind: 'weapon', weapon: 'machete', cond: 1, x: g.p.x, y: g.p.y + 6 });
+  assert.match(g.describeWorldItem(wi).sub, /send to pub inventory/i);
   g.p.face = 2; g.p.fx = 0; g.p.fy = 1;
-  run(g, 50, { interact: true });
+  run(g, 80, { interact: true });
   assert.equal(g.p.slots[0].id, 'bat');
-  run(g, 20, { interact: true });
-  assert.equal(g.p.slots[0].id, 'machete'); void wi;
+  const i = g.stash.findIndex((w) => w.id === 'machete'); assert.ok(i >= 0);
+  g.stashTake(i); assert.equal(g.p.slots[0].id, 'machete'); assert.ok(g.stash.some((w) => w.id === 'bat'));
+});
+test('v1.5 R6: bolting from outside with a survivor inside stays bolted', () => {
+  const g = fresh(); quiet(g); g.openZones.add(5); g.pubDoorFixed = true;
+  const d = g.map.pub.door;
+  const s = g.survivors[0] || (g.survivors.push({ kind: 'survivor', state: 'home', name: 'Test', hp: 100, maxHp: 100, x: 0, y: 0, r: 4 }), g.survivors[0]);
+  s.state = 'home'; s.dead = false; s.x = g.map.spots.pub_bar.px; s.y = g.map.spots.pub_bar.py; s.home = { x: s.x, y: s.y };
+  assert.ok(g.inPub(s.x, s.y));
+  g.p.x = d.x; g.p.y = d.y + 20; assert.ok(!g.inPub(g.p.x, g.p.y));
+  g.boltRearmed = true; g.setPubShut(false, true);
+  const it = []; g.safehouseInteractables(it); it.find((o) => o.id === 'pubdoor').describe().action();
+  assert.ok(g.pubShut);
+  run(g, 120); assert.ok(g.pubShut, 'still bolted while you stand there');
+});
+test('v1.5 T1/T2: every trial posted can be mastered from the minimum spawns in its window', async () => {
+  const { trialTarget, trialSupply, trialMasterable } = await import('../src/sim/nights.js');
+  const { TRIALS } = await import('../src/data.js');
+  for (let r = T.trials.fromRound; r < 40; r += T.trials.every) {
+    const until = r + T.trials.every - 1;
+    for (const id of Object.keys(TRIALS)) {
+      if (TRIALS[id].fixed) continue;
+      assert.ok(trialMasterable(id, r, until), `${id} at wave ${r}`);
+      assert.ok(trialTarget(id, r, until) * 2 <= trialSupply(r, until) * 0.6, `${id} at wave ${r}: master within 60% of the dead`);
+    }
+  }
+});
+test('v1.5 C1: comfort slots never outnumber the comforts that need one', () => {
+  const g = fresh(); g.signal.done = true; g.capBonus = 3; g.p.comforts.push('mule');
+  assert.ok(g.comfortCap() <= g.comfortSlotMax());
+});
+test('v1.5 L1: the town art has no fire engine baked in (the live one is the only one)', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../src/render/mapart.js', import.meta.url), 'utf8');
+  assert.match(src, /p\.kind !== 'fireengine'/);
+});
+test('v1.5 Z2: a walker passes Biscuit by and goes for you; his barking draws nothing', () => {
+  const g = fresh(); quiet(g); g.adoptBiscuit({ px: 0, py: 0 }); const bis = g.biscuit; bis.target = null;
+  g.p.x = 40 * 16 + 8; g.p.y = 32 * 16 + 8; bis.x = g.p.x + 70; bis.y = g.p.y + 20;
+  const e = place(g, 'walker', g.p.x + 80, g.p.y); g.enemyInside(e);
+  assert.ok(e.fx < 0, 'heads for you, not the dog 20 px away');
+  const n0 = g.lures.length; bis.mode = 'attack'; bis.target = e; bis.noiseT = 0; run(g, 2);
+  assert.equal(g.lures.length, n0, 'no noise lure from his bark');
+});
+test('v1.5 R2: survivors at home stab the dead tearing at a Red Lion window', () => {
+  const g = fresh(); quiet(g); g.debugOpenAll(); g.rescueDirect(0, 0); g.safeHouse = true;
+  g.p.x = 80 * 16; g.p.y = 32 * 16;
+  const w = g.safeBars[0]; const e = place(g, 'walker', w.spawn.x, w.spawn.y, { state: 'outside', bar: w, off: 0, hp: 300, maxHp: 300 });
+  run(g, 600); assert.ok(e.dead || e.hp < 300, 'the survivor fought back');
+});
+test('v1.5 R4: you can bolt the Red Lion with the dead at the door', () => {
+  const g = fresh(); quiet(g); g.openZones.add(5); g.pubDoorFixed = true;
+  const d = g.map.pub.door; g.p.x = d.x; g.p.y = d.y + 20; place(g, 'walker', d.x + 30, d.y + 30);
+  const it = []; g.safehouseInteractables(it); const o = it.find((x) => x.id === 'pubdoor').describe();
+  assert.ok(!o.disabled); assert.match(o.label, /Bolt/);
+});
+test('v1.5 P1: major events wait their turn: never more than 2 start in any 15 s', () => {
+  const g = fresh(); quiet(g); g.roundT0 = g.t; g.majorN = 0; const at = [];
+  for (let i = 0; i < 5; i++) g.queueMajor(() => at.push(g.t));
+  run(g, 60 * 90);
+  assert.equal(at.length, 5);
+  for (const t of at) assert.ok(at.filter((u) => u >= t && u < t + 15).length <= 2, at.join(','));
+  assert.ok(at[0] >= T.pacing.slots[0], 'nothing in the first seconds of the wave');
+});
+test('v1.5 W1: a spool of wire in the Red Lion starts Wire the Town', () => {
+  const g = fresh(); quiet(g); g.debugOpenAll(); g.pubDoorFixed = true; g.round = 6; g.errandsRoundStart(6);
+  const t = g.triggers.find((o) => o.id === 'wire'); assert.ok(t && t.at === 'pub_spool');
+  const sp = g.map.spots.pub_spool; assert.ok(g.inPub(sp.px, sp.py), 'inside the pub');
+  const it = g.interactables().find((o) => o.id === 'trig:wire'); assert.match(it.describe().label, /Spool of wire/);
+});
+test('v1.5 E1: lighting the beacons pays more than the smaller herd costs', () => {
+  const g = fresh(); quiet(g); g.round = 9; const s0 = g.scrap;
+  g.errandReward({ effect: 'beacons' }, { def: ERRAND.beacons });
+  const turned = Math.round(T.round.count(10) * T.specials.herdMult * 0.25);
+  assert.ok(g.scrap - s0 >= turned * T.scrap.killMelee * 1.5, `${g.scrap - s0} for ${turned} turned away`);
+});
+test('v1.5 R8: Biscuit gets into a bolted Red Lion through the dog flap', () => {
+  const g = fresh(); quiet(g); g.debugOpenAll(); g.pubDoorFixed = true; g.adoptBiscuit({ px: 0, py: 0 }); g.setPubShut(true, true);
+  const b = g.biscuit, d = g.map.pub.door, home = g.map.spots.pub_bar; b.x = d.x; b.y = d.y + 40;
+  for (let i = 0; i < 60 * 20 && !g.inPub(b.x, b.y); i++) g.dogMove(b, home.px, home.py, T.biscuit.speed, null);
+  assert.ok(g.inPub(b.x, b.y), 'in'); assert.ok(g.pubShut, 'still bolted');
+});
+test('v1.5 B1: the town safe pays out 1,000 a go while you hold, all of it with Shift', () => {
+  const g = fresh(); quiet(g); g.bank = 5000; const v = g.map.vault.find((o) => o.mode === 'withdraw');
+  g.p.x = v.px; g.p.y = v.py + 12; g.p.fx = 0; g.p.fy = -1; const s0 = g.scrap;
+  run(g, Math.ceil(T.bank.repeat * 60) + 2, { interact: true });
+  assert.equal(g.bank, 4000); assert.equal(g.scrap - s0, 900);
+  run(g, Math.ceil(T.bank.repeat * 60) * 2 + 4, { interact: true }); assert.equal(g.bank, 2000, 'kept going');
+  run(g, 2); run(g, 60, { interact: true, shift: true }); assert.equal(g.bank, 0, 'shift takes the lot');
+});
+test('v1.5 L3/L4: in the last stand survivors take the engine roof, Biscuit joins when hurt, all board, one engine drives off', () => {
+  const g = fresh(); quiet(g); g.debugOpenAll(); g.god = true; g.adoptBiscuit(g.map.spots.pub_bar); g.rescueDirect(0, 0); g.rescueDirect(0, 0);
+  const E = g.escape; E.unlocked = true; E.stage = 'fit'; g.p.x = E.ex; g.p.y = E.ey + 30; g.startLastStand();
+  assert.ok(g.survivors.every((s) => s.state === 'truck'));
+  run(g, 60 * 40);
+  assert.ok(g.survivors.every((s) => s.roof), 'on the roof');
+  assert.ok(!g.friendlies().some((f) => f.kind === 'survivor'), 'out of reach up there');
+  g.biscuit.hp = 10; run(g, 60 * 20); assert.ok(g.biscuit.onTruck, 'Biscuit jumped up');
+  E.stage = 'drive'; g.escapeInteractables([]); const out = []; g.escapeInteractables(out); out.find((o) => o.id === 'esc:drive').describe().action();
+  run(g, 60 * (T.escape.driveTime + T.escape.finalHold + 1));
+  assert.equal(g.state, 'escaped');
+  for (const r of g.truckRiders()) assert.ok(Math.abs(r.x - E.ex) < 40, 'rode along');
+});
+test('v1.5: Ellie\'s Bears runs bear, bear, bear, the peg next wave, the jukebox, and Ruth joins', () => {
+  const g = fresh(); quiet(g); g.debugOpenAll(); g.round = 4;
+  const bears = g.worldItems.filter((w) => w.kind === 'bear'); assert.equal(bears.length, 3);
+  g.describeWorldItem(bears[0]).action(); assert.equal(g.bears.step, 1); assert.ok(g.objective(), 'arrow to the next bear');
+  g.describeWorldItem(bears[1]).action(); g.describeWorldItem(bears[2]).action(); assert.equal(g.bears.step, 3);
+  let it = g.interactables(); assert.ok(!it.some((o) => o.id === 'use:bears:peg'), 'not until next wave');
+  g.round = 5; it = g.interactables(); it.find((o) => o.id === 'use:bears:peg').describe().action(); assert.equal(g.bears.step, 4);
+  const n0 = g.survivors.length; g.interactables().find((o) => o.id === 'use:bears:juke').describe().action();
+  assert.equal(g.bears.step, 5); assert.equal(g.survivors.length, n0 + 1); assert.equal(g.survivors.at(-1).name, 'Ruth Marsh');
+  assert.equal(g.bearsLog().length, 5); assert.ok(g.bearsLog().every((s) => s.done));
 });
 test('B14: a trap kill pays more than a melee kill', () => {
   assert.ok(T.scrap.killTrap > T.scrap.killMelee);

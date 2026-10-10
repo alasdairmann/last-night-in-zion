@@ -20,30 +20,63 @@ export const QuestMixin = {
   initQuest() {
     this.signal = { step: 0, receiverOut: false, cards: CARD_SPOTS.map(() => this.rng.int(10, 99)), found: [false, false, false], order: null, entered: [], sel: 0, built: false, holdT: 0, holding: false, waveT: 0, done: false, msgs: [] };
     this.torch = { key: false, burner: false, propane: false, pump: false, built: false };
-    this.tapes = []; this.bears = { found: {}, n: 0 }; this.songRound = -1;
+    this.tapes = []; this.bears = { found: {}, n: 0, step: 0, allRound: -1 }; this.songRound = -1;
     if (!this.attract) {
       TAPES.forEach((tp, i) => { const s = this.map.spots['tape' + i]; this.addWorldItem({ item: 'tape', tape: i, x: s.px, y: s.py, kind: 'tape', auto: true, glint: true, on: 'tape' }); });
-      for (const n of ['memorial', 'church_roof', 'lost_property']) { const s = this.map.spots[n]; this.addWorldItem({ item: 'bear', bear: n, x: s.px, y: s.py, kind: 'bear', glint: true, desc: 'bear' }); }
+      for (const n of ['memorial', 'church_roof', 'lost_property']) { const s = this.map.spots[n]; this.addWorldItem({ item: 'bear', bear: n, x: s.px, y: s.py, kind: 'bear', glint: n !== 'memorial', glow: n === 'memorial', desc: 'bear' }); } // v1.5: the first one sits in the light by the memorial
     }
     this.events.length = 0;
   },
   take_tape(wi) { this.findTape(wi.tape); },
-  desc_bear(wi) { return { label: 'A teddy bear', cost: 0, holdTime: 1, action: () => { wi.done = true; this.squeezeBear(wi.bear); }, sub: 'Give it a squeeze' }; },
+  desc_bear(wi) { return { label: this.bears.n ? 'One of Ellie\'s bears' : 'A teddy bear with a name tag', cost: 0, holdTime: 1, action: () => { wi.done = true; this.squeezeBear(wi.bear); }, sub: this.bears.n ? `Ellie's Bears: ${this.bears.n + 1}/3` : 'Pick it up' }; },
   take_receiver() { this.pocket.receiver = 1; this.signal.step = Math.max(this.signal.step, 2); this.emit('banner', { prio: 'objective', key: 'signal.receiver', text: 'A HAM RADIO RECEIVER', sub: 'Dead. It needs mains power' }); },
   take_card(wi) { const i = wi.card; this.signal.found[i] = true; this.emit('banner', { prio: 'objective', key: 'signal.card' + i, text: `FREQUENCY CARD ${['I', 'II', 'III'][i]}`, sub: 'It reads', code: String(this.signal.cards[i]) }); },
   findTape(i) {
     this.tapes.push(i);
     this.emit('tape', { i, title: TAPES[i].title, text: TAPES[i].text });
   },
+  // v1.5: Ellie's Bears, the third questline. Three bears, Ellie's peg at the school, her song on the jukebox, and her mum
   squeezeBear(n) {
-    this.bears.found[n] = true; this.bears.n++;
-    this.emit('squeak', {});
-    if (this.bears.n < 3) this.emit('banner', { text: `A TEDDY BEAR (${this.bears.n}/3)`, sub: 'Squeeze all three and the jukebox plays: double Scrap for a wave', help: true });
-    if (this.bears.n >= 3) {
-      this.songRound = this.state === 'active' ? this.round : this.round + 1;
-      this.emit('banner', { text: 'THE JUKEBOX STARTS PLAYING', sub: 'Every kill this wave pays double', help: true });
-      this.emit('song', {});
-    }
+    const B = this.bears;
+    B.found[n] = true; B.n++; B.step = Math.max(B.step, B.n);
+    this.emit('squeak', {}); this.emit('questStep', { quest: 'bears', step: B.step });
+    const pin = this.bearObjective();
+    if (B.n === 1) this.card({ key: 'bears', prio: 'objective', text: 'QUEST: ELLIE\'S BEARS', sub: 'A name tag: "Ellie Marsh, Class 2". Two more of her bears are out there. Follow the yellow arrow', pin });
+    else if (B.n === 2) this.card({ key: 'bears', prio: 'objective', update: true, text: 'ELLIE\'S BEARS (2/3)', sub: 'Another tag, another note in Ellie\'s hand: "keep going". One more', pin });
+    else { B.allRound = this.round; this.card({ key: 'bears', prio: 'objective', update: true, text: 'ALL THREE OF ELLIE\'S BEARS', sub: 'Each tag says the same: "my peg, Zion Primary". Take them there next wave' }); }
+  },
+  bearsDeliverable() { return this.bears.step === 3 && this.round > this.bears.allRound; },
+  // the next place the bears quest wants you: the nearest bear still out there, then her peg, then the jukebox
+  bearObjective() {
+    const B = this.bears, p = this.p;
+    if (B.step === 1 || B.step === 2) { const w = this.worldItems.filter((o) => o.kind === 'bear' && !o.done).sort((a, b) => hyp(a.x - p.x, a.y - p.y) - hyp(b.x - p.x, b.y - p.y))[0]; return w ? { x: w.x, y: w.y } : null; }
+    if (this.bearsDeliverable()) { const s = this.map.spots.staffroom; return { x: s.px, y: s.py }; }
+    if (B.step === 4) { const s = this.map.spots.jukebox; return { x: s.px, y: s.py }; }
+    return null;
+  },
+  bearsInteractables(out) {
+    const B = this.bears, S = this.map.spots;
+    if (this.bearsDeliverable()) out.push({ id: 'use:bears:peg', x: S.staffroom.px, y: S.staffroom.py, range: 26, describe: () => ({ label: 'Hang the bears on Ellie\'s peg', cost: 0, holdTime: 1.5, sub: 'Ellie\'s Bears 4/5', action: () => {
+      B.step = 4; this.emit('questStep', { quest: 'bears', step: 4 });
+      this.card({ key: 'bears', prio: 'objective', update: true, text: 'A NOTE ON THE PEG', sub: '"Ellie, if you find this, Mum is at the Red Lion. Put our song on." Play it on the jukebox', pin: { x: S.jukebox.px, y: S.jukebox.py } });
+    } }) });
+    if (B.step === 4 && this.openZones.has(5)) out.push({ id: 'use:bears:juke', x: S.jukebox.px, y: S.jukebox.py - 10, range: 24, describe: () => ({ label: 'Play Ellie\'s song', cost: 0, holdTime: 1, sub: 'Ellie\'s Bears 5/5', action: () => this.bearsPayoff() }) });
+  },
+  // the payoff: the song (double Scrap for a wave), Ellie's mum joins you, and the secret is out
+  bearsPayoff() {
+    const B = this.bears; B.step = 5; this.emit('questStep', { quest: 'bears', step: 5 });
+    this.songRound = this.state === 'active' ? this.round : this.round + 1;
+    this.emit('song', {});
+    const d = this.map.pub.door, n = this.newSurvivor(d.x, d.y);
+    n.name = 'Ruth Marsh'; n.role = 'fighter'; n.special = 'ellie'; n.maxHp = n.hp = T.survivors.fighterHp; this.namesUsed.add(n.name);
+    this.survivors.push(n); this.admitSurvivor(n); // Ruth comes even when the pub is full: she's been waiting
+    this.radio('That song. Ellie? ...No. You found her bears. She hid them so I\'d follow. I\'m staying with you.', 'Ruth Marsh');
+    this.card({ key: 'bears', prio: 'objective', update: true, text: 'THE SECRET OF THE BEARS', sub: 'Ellie hid them as a trail for her mum. Ruth Marsh joins you, and every kill this wave pays double' });
+  },
+  bearsLog() {
+    const B = this.bears; if (!B.step) return null;
+    const steps = ['Find a teddy bear', 'Find Ellie\'s second bear', 'Find Ellie\'s third bear', B.step >= 3 && !this.bearsDeliverable() && B.step === 3 ? 'Take them to Ellie\'s peg at Zion Primary (from next wave)' : 'Take them to Ellie\'s peg at Zion Primary', 'Play Ellie\'s song on the Red Lion jukebox'];
+    return steps.map((text, i) => ({ text, done: i < B.step })).slice(0, Math.min(5, B.step + 1));
   },
   songActive() { return this.songRound === this.round && this.state === 'active'; },
 

@@ -78,7 +78,7 @@ const RACKS = [
 const COMFORT_SPOTS = [
   { id: 'coffee', x: 16, y: 29 }, { id: 'steady', x: 11, y: 11 }, { id: 'eagle', x: 41, y: 9 },
   { id: 'gasmask', x: 71, y: 6 }, { id: 'barbed', x: 87, y: 6 }, { id: 'mule', x: 76, y: 28 },
-  { id: 'stew', x: 10, y: 50 }, { id: 'bandages', x: 53, y: 50 }, { id: 'shoes', x: 72, y: 50 },
+  { id: 'stew', x: 5, y: 45 }, // v1.5 R7: in the kitchen, well away from the door { id: 'bandages', x: 53, y: 50 }, { id: 'shoes', x: 72, y: 50 },
 ];
 const SECOND_WIND = { x: 75, y: 50 };
 const WORKSHOP = { x: 81, y: 28 };
@@ -123,7 +123,7 @@ const SPOTS = {
   hardware_a: [36, 29], hardware_b: [41, 29], garage_a: [80, 30], garage_b: [88, 30], school_care: [34, 10],
   fuseboard: [14, 30], fire_locker: [19, 30], school_mast: [47, 6], field: [56, 11], church_ladder: [16, 10], fire_ladder: [21, 26],
   drain: [45, 33], yard_a: [69, 14], yard_b: [71, 16], yard_c: [84, 12], pharmacy_cellar: [59, 52], pharmacy_back: [51, 52],
-  pub_door: [9, 51], pub_in: [9, 48], pub_kitchen: [6, 47], pub_bar: [10, 47], phonebox: [45, 30], church_porch: [11, 13],
+  pub_door: [9, 51], pub_in: [9, 48], pub_kitchen: [6, 47], pub_bar: [10, 47], pub_spool: [12, 49], pub_flap_in: [7, 49], pub_flap_out: [7, 51], phonebox: [45, 30], church_porch: [11, 13],
   shed: [85, 48], sluice: [93, 48], searchlight: [44, 10], school_shed: [58, 14], towtruck: [87, 37], tyres: [90, 31],
   engine: [28, 29], engine_cab: [31, 28], church_board: [11, 13], staffroom: [45, 11], dartboard: [12, 48], memorial: [49, 33],
   church_roof: [8, 12], lost_property: [40, 11], scarecrow: [90, 56], bbq: [6, 57], bench_yard: [74, 13], bench_garage: [83, 29],

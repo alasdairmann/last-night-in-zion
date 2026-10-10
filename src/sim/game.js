@@ -153,7 +153,9 @@ export class Game {
   onHeavySoft(x, y) { return this.map.heavySoft.has(Math.floor(y / TS) * MW + Math.floor(x / TS)); }
   hasComfort(id) { return this.p.comforts.includes(id); }
   ripe(id) { return this.hasComfort(id) && (this.p.comfortRounds[id] || 0) >= T.comforts.ripenRounds; }
-  comfortCap() { return (this.signal && this.signal.done ? 9 : this.firstBruteKilled ? T.comforts.capRaised : T.comforts.cap) + (this.capBonus || 0) + (this.hasComfort && this.hasComfort('mule') ? T.mule.comfortSlots : 0); }
+  comfortCap() { return Math.min(this.comfortSlotMax(), (this.signal && this.signal.done ? 9 : this.firstBruteKilled ? T.comforts.capRaised : T.comforts.cap) + (this.capBonus || 0) + (this.hasComfort && this.hasComfort('mule') ? T.mule.comfortSlots : 0)); }
+  // v1.5 C1: never more slots than there are slot-taking comforts to fill them, less one, so slots stay scarce
+  comfortSlotMax() { return Object.values(COMFORTS).filter((c) => !c.noPower).length - 1; }
   fuelRounds() { return this.hasRole && this.hasRole('mechanic') ? 10 : T.generator.fuelRounds; }
   bark(key, force = false, text = null) {
     if (this.attract) return;
@@ -917,7 +919,7 @@ export class Game {
     const bars = this.safeHouse ? [...this.barricades, ...this.safeBars] : this.barricades;
     for (const b of bars) {
       const inside = ((p.x - b.x) * b.ix + (p.y - b.y) * b.iy) > 0;
-      if (inside && b.planks < T.barricade.planks) add('barricade', b, b.x, b.y);
+      if ((inside || b.safe) && b.planks < T.barricade.planks) add('barricade', b, b.x, b.y); // v1.5 R3: the Red Lion's windows from outside too
       else if (this.power && b.planks >= T.barricade.planks && (b.reinforce || 0) < 2) add('reinforce', b, b.x, b.y); // v1.4 F2: from either side
     }
     this.map.racks.forEach((r, i) => { if (!this.buildingBurning(r.px, r.py)) add('rack', { ...r, id: i }, r.px, r.py); });
@@ -951,7 +953,7 @@ export class Game {
     const D = (label) => ({ label, cost: 0, disabled: true });
     switch (c.kind) {
       case 'door': return R(`Clear ${o.name}`, o.cost, T.hold.door, () => this.openDoor(o));
-      case 'barricade': return R('Repair', 0, this.nearFlag() ? 0.05 : T.hold.repair, null, { repair: true, sub: o.safe ? 'The Red Lion\'s window' : this.plankScrap < T.scrap.plankCapPerRound ? `Free, and pays +${T.scrap.plank} Scrap a plank` : 'Free. Planks pay no more Scrap this wave' });
+      case 'barricade': return R(o.safe ? 'Repair the barricade' : 'Repair', 0, this.nearFlag() ? 0.05 : T.hold.repair, null, { repair: true, sub: o.safe ? 'The Red Lion\'s window' : this.plankScrap < T.scrap.plankCapPerRound ? `Free, and pays +${T.scrap.plank} Scrap a plank` : 'Free. Planks pay no more Scrap this wave' });
       case 'reinforce': {
         const lvl = o.reinforce || 0;
         if (o.safe) { // v1.2: Red Lion shutters
@@ -985,8 +987,9 @@ export class Game {
           return R(`Deposit ${B.unit.toLocaleString('en-GB')}`, 0, T.hold.buy, () => { this.scrap -= B.unit; this.bank += B.unit; this.emit('purchase', { amt: 0 }); }, { sub: `Safe: ${this.bank.toLocaleString('en-GB')} (+5% a round)` });
         }
         if (this.bank <= 0) return D('The town safe is empty');
-        const net = Math.floor(this.bank * (1 - B.fee) / 10) * 10;
-        return R(`Withdraw ${net.toLocaleString('en-GB')}`, 0, T.hold.buy, () => { this.bank = 0; this.scrap += net; this.emit('scrap', { x: o.px, y: o.py - 10, amt: net, big: true }); }, { sub: '10% fee' });
+        // v1.5 B1: 1,000 a press, holding keeps going; Shift takes the lot
+        const all = !!this.shiftHeld, take = all ? this.bank : Math.min(B.unit, this.bank), net = Math.floor(take * (1 - B.fee) / 10) * 10;
+        return R(`Withdraw ${take.toLocaleString('en-GB')}${all ? ' (all)' : ''}`, 0, all ? T.hold.buy : B.repeat, () => { this.bank -= take; this.scrap += net; this.emit('scrap', { x: o.px, y: o.py - 10, amt: net, big: true }); }, { sub: `You get ${net.toLocaleString('en-GB')} after the 10% fee. ${this.bank.toLocaleString('en-GB')} held. Hold to keep going, Shift for all`, repeat: !all });
       }
       case 'rack': return this.describeRack(o);
       case 'comfort': {
@@ -1015,7 +1018,7 @@ export class Game {
         });
       }
       case 'crate': {
-        if (o.state === 'ready') { const sw = o.item === 'closed' ? null : this.swapHold(o.item, o.cond ?? 1); return R(`Take ${o.item === 'closed' ? 'CLOSED' : `${CONDITIONS[o.cond ?? 1].name} ${itemName(o.item)}`}`, 0, sw ? sw.holdTime : T.hold.take, () => this.takeCrate(o), { sub: o.item === 'closed' ? '' : sw ? sw.sub : this.replaceText(o.item), warn: !!sw }); }
+        if (o.state === 'ready') return R(`Take ${o.item === 'closed' ? 'CLOSED' : `${CONDITIONS[o.cond ?? 1].name} ${itemName(o.item)}`}`, 0, T.hold.take, () => this.takeCrate(o), { sub: o.item === 'closed' ? '' : this.replaceText(o.item, true) }); // v1.5 I2
         if (this.freePull >= this.round && !this.timed.sale) return R('Trader\'s crate: FREE PULL', 0, T.hold.crate, () => { this.freePull = 0; this.useCrate(o, true); }, { sub: 'From the supply drop' });
         const price = this.cratePrice();
         if (this.scrap < price && this.scrap < T.loan.threshold && this.debt <= 0)
@@ -1070,11 +1073,12 @@ export class Game {
   stashWeapon(w) {
     (this.stash ||= []).push(w);
     this.emit('equip', { id: w.id, cond: w.cond, stash: true });
-    this.card({ key: 'stash.' + w.id, prio: 'info', text: `${weaponName(w).toUpperCase()} SENT TO THE RED LION`, sub: 'No free slot. Swap it at the bar' });
+    this.card({ key: 'stash.' + w.id, prio: 'info', text: `${weaponName(w).toUpperCase()} SENT TO THE RED LION`, sub: 'No free slot. It\'s in the armoury behind the bar' });
   }
   stashTake(i) {
     const p = this.p, w = (this.stash || [])[i]; if (!w) return false;
     this.stash.splice(i, 1);
+    if (w.kind === 'melee') { this.stash.push(p.slots[0]); p.slots[0] = w; p.cur = -1; this.selectSlot(0); this.emit('equip', { id: w.id, cond: w.cond }); return true; } // v1.5 I2
     let s = this.gunSlotFor(w.id);
     if (s === null) { s = this.gunClass(w.id) === 'primary' ? 1 : 2; this.stash.push(p.slots[s]); }
     p.slots[s] = w; if (p.cur === s) p.cur = -1; this.selectSlot(s);
@@ -1088,9 +1092,11 @@ export class Game {
     this.emit('equip', { id: w.id });
     return true;
   }
-  giveItem(id, cond = 1) {
+  // found: a pickup or crate, not a purchase. v1.5 I2: a found melee weapon never replaces yours; it goes to the stash
+  giveItem(id, cond = 1, found = false) {
     const p = this.p;
     if (id.startsWith('t:')) { const t = id.slice(2); p.throwable = { id: t, count: THROWS[t].max }; this.emit('equip', { id: t }); return; }
+    if (MELEE[id] && found && p.slots[0]) { this.stashWeapon(this.makeWeapon(id, undefined, undefined, cond)); return; }
     if (MELEE[id]) { p.slots[0] = this.makeWeapon(id, undefined, undefined, cond); this.selectSlot(0); p.cur = 0; this.emit('equip', { id, cond }); return; }
     const w = this.makeWeapon(id, undefined, undefined, cond);
     const s = this.gunSlotFor(id);
@@ -1143,7 +1149,7 @@ export class Game {
   updateInteract(inp) {
     const p = this.p;
     // feedback: a hold only starts on a fresh press. Finishing one task, or walking up with the key already down, never rolls into the next
-    const pressed = !!inp.interact && !this.holdPrev; this.holdPrev = !!inp.interact;
+    const pressed = !!inp.interact && !this.holdPrev; this.holdPrev = !!inp.interact; this.shiftHeld = !!inp.shift;
     this.prompt = null; p.repairing = false;
     if (p.dead || p.downed || this.attract) { this.hold.key = null; return; }
     const cands = this.candidates();
@@ -1203,6 +1209,7 @@ export class Game {
       if (info.cost) this.spend(info.cost);
       if (info.partsCost) { this.parts -= info.partsCost; this.emit('purchase', { amt: 0 }); }
       info.action();
+      if (info.repeat) { this.hold.done = false; this.hold.t = 0; } // v1.5 B1/H1: hold to keep going
     }
   }
 
@@ -1242,7 +1249,7 @@ export class Game {
   }
   takeCrate(c) {
     const item = c.item; c.state = 'idle'; c.item = null;
-    this.giveItem(item, c.cond ?? 1);
+    this.giveItem(item, c.cond ?? 1, true);
     if (item === 'hammer') this.bark('crateHammer', true); else this.bark('crateGood');
   }
   updateCrates() {
@@ -1426,8 +1433,10 @@ export class Game {
     }
     for (const q of this.pending) {
       q.t -= DT;
-      if (q.t <= 0 && (alive < cap || q.type === 'looter')) { q.done = true; this.spawnPending(q); }
+      if (q.t <= 0 && q.type === 'looter' && !this.majorReady()) { q.t = 1; continue; } // v1.5 P1: wait for a quiet moment
+      if (q.t <= 0 && (alive < cap || q.type === 'looter')) { q.done = true; if (q.type === 'looter') this.majorMark(); this.spawnPending(q); }
     }
+    this.pumpMajor();
     if (this.pending.some((q) => q.done)) this.pending = this.pending.filter((q) => !q.done);
 
     // last walker (§20.4)
@@ -1508,6 +1517,7 @@ export class Game {
         this.pending.push({ t: this.rng.range(6, 20), type: 'looter', counted: false });
       }
     }
+    this.roundT0 = this.t; this.majorN = 0;
     const bmax = THROWS.brick.max + (this.hasComfort('barbed') ? 1 : 0);
     if (p.throwable.id === 'brick') p.throwable.count = Math.min(bmax, p.throwable.count + 2);
     if (!this.attract) {
@@ -1572,6 +1582,14 @@ export class Game {
     }
     return 'walker';
   }
+  // ---------- v1.5 P1: one major event at a time, spread through the wave (looters, town events, radio errands) ----------
+  majorReady() {
+    const P = T.pacing, n = this.majorN || 0;
+    return this.state === 'active' && this.t - (this.lastMajorT ?? -99) >= P.gap && this.t - (this.roundT0 || 0) >= P.slots[Math.min(n, P.slots.length - 1)];
+  }
+  majorMark() { this.lastMajorT = this.t; this.majorN = (this.majorN || 0) + 1; }
+  queueMajor(fn) { (this.majorQ ||= []).push(fn); }
+  pumpMajor() { if (this.majorQ && this.majorQ.length && this.majorReady()) { this.majorMark(); this.majorQ.shift()(); } }
   rollBasic() { const t = this.rollType(); return t === 'screamer' ? 'walker' : t; }
   spawnOne(nearest = false) {
     this.toSpawn--;
@@ -1585,7 +1603,7 @@ export class Game {
       const far = hyp(this.p.x - this.map.pub.door.x, this.p.y - this.map.pub.door.y) > T.survivors.raidFarDist;
       if (this.rng.next() < (far ? T.survivors.raidChanceFar : T.survivors.raidChance)) {
         if (this.pubRaidFrom < 0) { this.pubRaidFrom = this.t + T.pubRaid.warn; this.emit('banner', { text: 'THE RED LION WILL BE HIT', sub: `In ${T.pubRaid.warn} s. Get back or bolt the door`, danger: true }); this.radio('They\'re heading for the pub. You\'ve got twenty seconds.', this.homeSurvivors()[0].name); }
-        else if (this.t >= this.pubRaidFrom) e.raid = true;
+        else if (this.t >= this.pubRaidFrom && this.enemies.filter((o) => !o.dead && (o.raid || (o.bar && o.bar.safe && o.state === 'outside'))).length < T.aggro.pubMax) e.raid = true; /* v1.5 R1: 1-2 at the pub at most */
       }
     }
     this.maybeReceiverWalker(e);
@@ -1619,7 +1637,6 @@ export class Game {
     else if (q.type === 'dog') {
       const e = this.makeEnemy('dog'); e.x = e.ox = q.x; e.y = e.oy = q.y; e.state = 'inside';
       if (this.dogRoundCount >= T.dogLeader.fromRound && !this.leaderSpawned) { this.leaderSpawned = true; e.leader = true; e.hp *= T.dogLeader.hpMult; e.maxHp = e.hp; e.r = 6; }
-      if (this.biscuit && !this.biscuit.dead && this.rng.next() < 0.3) e.tgtBiscuit = true;
       this.enemies.push(e); this.emit('dogSpawn', { x: q.x, y: q.y });
     }
     else if (q.type === 'dogMix') { const pos = this.dogSpot(); if (pos) { this.pending.push({ t: T.dog.warn, type: 'dog', counted: true, x: pos.x, y: pos.y }); this.emit('dogWarn', { x: pos.x, y: pos.y }); } else this.toSpawn++; }
@@ -1785,7 +1802,7 @@ export class Game {
       let bd = e.inPub ? 200 : e.tgtBiscuit ? 400 : 28;
       let standing = null; // v1.2 B3: a downed Biscuit is a target only if nothing standing is within 160 px
       const busy = () => (standing ??= (!p.dead && !p.downed && dP < T.downedTarget) || this.friendlies().some((o) => !o.dead && !o.down && hyp(o.x - e.x, o.y - e.y) < T.downedTarget));
-      for (const f of this.friendlies()) { if (f.dead || (f.down && busy()) || (f.kind === 'survivor' && f.state === 'home' && !e.inPub && !(this.inPub(e.x, e.y)))) continue; if (e.tgtBiscuit && f.kind !== 'biscuit') continue; const d = hyp(f.x - e.x, f.y - e.y); if (d < bd && (d < dP || e.inPub || e.tgtBiscuit)) { bd = d; fr = f; } }
+      for (const f of this.friendlies()) { if (f.dead || (f.down && busy()) || (f.kind === 'survivor' && f.state === 'home' && !e.inPub && !(this.inPub(e.x, e.y)))) continue; if (e.tgtBiscuit && f.kind !== 'biscuit') continue; const d = hyp(f.x - e.x, f.y - e.y); if (f.kind === 'biscuit' && !e.inPub && d > T.aggro.dogPath && f.target !== e) continue; /* v1.5 Z2: Biscuit only if he's in the way or biting */ if (d < bd && (d < dP || e.inPub || e.tgtBiscuit)) { bd = d; fr = f; } }
       if (e.inPub && dP < 40) fr = null;
     }
     if (fr) { this.attackFriendly(e, fr); return; }
@@ -1922,6 +1939,7 @@ export class Game {
     const p = this.p, L = T.looter;
     e.lifeT += DT;
     if (!e.route) this.planLooter(e);
+    if (!e.announced && !p.dead) { e.announced = true; this.card({ key: 'looter', prio: 'critical', text: 'A LOOTER IS IN TOWN', sub: 'Follow the red arrow. He\'s robbing the caches', pin: { x: e.x, y: e.y } }); } // v1.5 P2: never missable
     if (!e.spotted && !p.dead && (hyp(p.x - e.x, p.y - e.y) < L.spotR)) {
       e.spotted = true;
       this.card({ key: 'looter', prio: 'critical', text: 'LOOTER SPOTTED', sub: 'He\'s carrying Scrap, catch him', pin: { x: e.x, y: e.y } });

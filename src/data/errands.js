@@ -32,7 +32,7 @@ export const ERRANDS = [
       { type: 'use', at: 'school_mast', seconds: 3, label: 'Repair the radio mast', text: 'Repair the mast on the school roof', done: [{ effect: 'mast' }, { effect: 'radio', text: 'Mast\'s up. Drop\'s coming. Light a flare on the playing field.' }] },
       { type: 'fetch', item: 'flare', spots: ['fire_locker'], text: 'Take a flare from the fire station locker' },
       { type: 'use', at: 'field', seconds: 2, label: 'Light the flare', text: 'Light it in the middle of the playing field', done: [{ effect: 'light', at: 'field', r: 70, t: 60 }] },
-      { type: 'hold', at: 'field', seconds: 45, radius: 72, retries: 1, text: 'Hold the playing field', label: 'A plane circles overhead', done: [{ effect: 'drop', at: 'field' }] },
+      { type: 'hold', at: 'field', seconds: 45, radius: 72, retries: 1, minAlive: 6, text: 'Hold the playing field', label: 'A plane circles overhead', done: [{ effect: 'drop', at: 'field' }] },
       { type: 'use', at: 'field', seconds: 1.5, label: 'Open the supply crate', text: 'Open the crate' },
     ],
     rewards: [{ finds: 2, at: 'field' }, { cratePull: true }, { parts: 3 }, { padding: true }],
@@ -100,7 +100,7 @@ export const ERRANDS = [
   // v1.2 B19: the searchlight errand is gone; the light costs 500 a use instead.
   {
     id: 'wire', name: 'Wire the Town', brief: 'Wire the traps to a switchboard in the Red Lion.',
-    offer: { source: 'board', minRound: 6, requires: ['zone:5'] }, build: 'wireSteps',
+    offer: { source: 'pub', minRound: 6, at: 'pub_spool', requires: ['zone:5', 'pubDoor'] }, build: 'wireSteps', // v1.5 W1: started from the spool in the Red Lion
     steps: [
       { type: 'fetch', item: 'drum', spots: ['hardware_a', 'hardware_b'], carry: true, text: 'Get a cable drum from the hardware shop' },
       // one 'use' step per trap is added when the errand starts (sim/errands.js wireSteps)

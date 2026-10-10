@@ -79,7 +79,7 @@ export const T = deepFreeze({
   fire: { dps: 40, burnTime: 4 },
   traps: { playerDps: 50, fenceSpecialDmg: 400, armN: 4, armSpecial: 1, noteVol: 0.35 }, // v1.2 B22: armed traps wait for a crowd
   generator: { startHold: 1.5, fuelRounds: 8, refuelHold: 1.0, jerryCost: 500, jerrySlow: 0.85 },
-  bank: { interest: 0.05, fee: 0.10, unit: 1000 },
+  bank: { interest: 0.05, fee: 0.10, unit: 1000, repeat: 0.35 }, // v1.5 B1: s per 1,000 while you hold
   loan: { amount: 1000, repay: 1500, threshold: 500 },
   bounty: { from: 8, chance: 0.30, scrap: 400 },
   director: { highPressure: 8, highTime: 6, delay: 1, delayCount: 3, lowPressure: 1, lowTime: 15 },
@@ -102,9 +102,9 @@ export const T = deepFreeze({
   fuse: { blowChance: 0.04 },
   jerryBlast: { dmg: 300, radius: 48 },
 
-  escape: { unlockRound: 15, fitBurst: 6, lastStand: 90, lastStandSignal: 45, herdMult: 1.5, spawnRateMult: 2.0, bruteAt: 45, fitHold: 3, chiefHp: 6, driveTime: 5 },
+  escape: { unlockRound: 15, fitBurst: 6, lastStand: 90, lastStandSignal: 45, herdMult: 1.5, spawnRateMult: 2.0, bruteAt: 45, fitHold: 3, chiefHp: 6, driveTime: 7, finalHold: 1.2 },
 
-  survivors: { max: 4, hp: 100, dmg: 20, attackEvery: 1.5, fighterHp: 200, fighterDmg: 40, sickChance: 0.125, sickFromRound: 10, sickDeathRounds: 3, healPerRound: 10, riseDelay: 1.5, raidChance: 0.12, raidChanceFar: 0.3, raidFarDist: 220 },
+  survivors: { max: 6, hp: 100, dmg: 20, attackEvery: 1.5, fighterHp: 200, fighterDmg: 40, sickChance: 0.125, sickFromRound: 10, sickDeathRounds: 3, healPerRound: 10, riseDelay: 1.5, raidChance: 0.03, raidChanceFar: 0.05, raidFarDist: 220 },
   escort: { followDist: 16, cowerCount: 2, cowerRadius: 24, hp: 150, speed: 70 },
   // v1.4 G: Biscuit is control, not damage. Trip (walker to crawler), pin (2 s, your hits crit), bark (knockback + stagger); keeps himself alive
   biscuit: { hp: 300, hpGrowth: 75, speed: 120, bite: 3, biteEvery: 0.8, pinEvery: 2, pinTime: 2, tripChance: 0.25, barkEvery: 5, barkKnock: 24, barkStagger: 0.6, barkR: 36, barkTrigger: 28, wary: 0.3, flee: 0.15, recover: 0.5, reviveHold: 1.5, downedHits: 6, downGrace: 4, followDist: 24, guardDist: 32, attackRange: 120, stayGuard: 48, barkRange: 160, scrap: 25, stagger: 0.3 },
@@ -139,6 +139,13 @@ export const T = deepFreeze({
   swapHold: 1.0,                                                      // B6: replacing an upgraded or better weapon
   downedTarget: 160,                                                  // B3
   searchlight: { blindTime: 0.5 },                                    // B19 (cost and duration live on the trap)
+  pacing: { gap: 8, slots: [6, 20, 35, 50] },                         // v1.5 P1: s apart, and s into the wave for the 1st/2nd/3rd/4th+ major event
+  flareSpawn: { every: 1.2 },                                          // v1.5 Z3: the supply-drop flare tops the dead up this often
+  beacons: { payMult: 1.5, parts: 2 },                                 // v1.5 E1: the beacons' reward beats the Scrap the smaller herd costs you
+  survivorArrive: { from: 3, every: 3, chance: 0.7 },                   // v1.5 R9: a survivor walks up to the fixed Red Lion door
+  truckRoof: { run: 75, range: 150, every: 0.7, dmg: 45, dogAt: 0.5 },   // v1.5 L3/L4: survivors on the engine's roof in the last stand; Biscuit climbs up below half health
+  aggro: { dogPath: 12, pubMax: 2 },                                   // v1.5 R1/Z2: the player first; Biscuit only in the way; 2 at the pub at most
+  pubDefend: { reach: 24, doorR: 40, dmgMult: 1.5, meleeShare: 0.33 },                  // v1.5 R2: survivors stab through the windows at the dead tearing them
   pubRaid: { warn: 20, hops: 2, survivorMult: 2, reinforceMult: 2 }, // B24
   wire: { hold: 3, from: 6 },                                         // B21
   heal: { medicPerRound: 25, bandage: 50, biscuitBreak: 15 },         // B12

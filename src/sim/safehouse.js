@@ -150,17 +150,17 @@ export const SafehouseMixin = {
     if (this.openZones.has(5)) {
       out.push({ id: 'pubdoor', x: d.x, y: d.y, range: 26, describe: () => {
         if (!this.pubDoorFixed) return { label: 'Fix the Red Lion door', cost: T.pubSafe.fix, holdTime: T.pubSafe.fixHold, action: () => this.fixPubDoor(), sub: 'Opens the pub, and the cellar under it' };
-        if (this.zedsNear(d.x, d.y, T.pubSafe.clearR)) return { label: 'The door: too many of the dead nearby', cost: 0, disabled: true };
-        if (this.pubShut) return { label: 'Unbolt the Red Lion door', cost: 0, holdTime: T.pubSafe.hold, action: () => this.setPubShut(false), sub: 'Opens the way in and out' };
+        // v1.5 R4: no proximity block. Bolt it in their faces
+        if (this.pubShut) return { label: 'Unbolt the Red Lion door', cost: 0, holdTime: T.pubSafe.hold, action: () => { this.setPubShut(false); this.boltRearmed = false; }, sub: 'Opens the way in and out' };
         const blocked = [p, ...this.enemies.filter((e) => !e.dead), ...this.friendlies()].some((o) => hyp(o.x - d.x, o.y - d.y) < 12);
         if (blocked) return { label: 'Bolt the door: something is in the way', cost: 0, disabled: true };
-        return { label: 'Bolt the Red Lion door', cost: 0, holdTime: T.pubSafe.hold, action: () => this.setPubShut(true), sub: 'Raiders and the dead must tear a window down to get in' };
+        return { label: 'Bolt the Red Lion door', cost: 0, holdTime: T.pubSafe.hold, action: () => { this.setPubShut(true); this.boltRearmed = false; }, sub: 'Raiders and the dead must tear a window down to get in' };
       } });
     }
     // v1.4 F3: the stash behind the bar
-    if (this.openZones.has(5) && this.pubDoorFixed && (this.stash.length || this.survivors.some((s) => s.weapon))) {
+    if (this.openZones.has(5) && this.pubDoorFixed && (this.stash.length || this.survivors.some((s) => s.weapon || s.melee))) {
       const b = this.map.spots.pub_bar;
-      out.push({ id: 'stash', x: b.px, y: b.py, range: 20, describe: () => ({ label: 'The stash', cost: 0, holdTime: 0.3, action: () => this.emit('stash', {}), sub: `${this.stash.length} gun${this.stash.length === 1 ? '' : 's'} stored. Swap with what you carry` }) });
+      out.push({ id: 'stash', x: b.px, y: b.py, range: 20, describe: () => ({ label: 'The armoury (pub inventory)', cost: 0, holdTime: 0.3, action: () => this.emit('stash', {}), sub: `${this.stash.length} weapon${this.stash.length === 1 ? '' : 's'} stored. Swap with what you carry` }) });
     }
     if (this.switchboardOn() && this.openZones.has(5)) {
       const sb = this.switchboardSpot();

@@ -62,6 +62,7 @@ export const ErrandMixin = {
     for (const r of o.requires || []) {
       if (r.startsWith('zone:') && !this.openZones.has(+r.slice(5))) return false;
       if (r === 'power' && !this.power) return false;
+      if (r === 'pubDoor' && !this.pubDoorFixed) return false;
       if (r === 'everPowered' && !this.everPowered) return false;
       if (r === 'safeRoom' && this.survivors.filter((s) => !s.dead).length >= T.survivors.max) return false;
     }
@@ -85,10 +86,10 @@ export const ErrandMixin = {
     // radio: every 3rd round, plus Light the Beacons the round before a herd
     if (this.offerRadio && r > this.offerRadio.round + 1) this.offerRadio = null;
     const herdNext = (r + 1) % T.specials.herdEvery === 0;
-    if (herdNext) { const b = ERRAND.beacons; if (!this.errandActive('beacons') && this.reqOk(b)) this.offerViaRadio(b); }
+    if (herdNext) { const b = ERRAND.beacons; if (!this.errandActive('beacons') && this.reqOk(b)) this.queueMajor(() => this.offerViaRadio(b)); } // v1.5 P1: in its own slot
     else if (r % T.errands.radioEvery === 0 && r > 0) {
       if (this.radioSilence) { this.radioSilence = false; this.radio(RADIO.silence); }
-      else { const d = this.pickWeighted(this.eligible('radio').filter((x) => !x.offer.beforeHerd)); if (d) this.offerViaRadio(d); }
+      else { const d = this.pickWeighted(this.eligible('radio').filter((x) => !x.offer.beforeHerd)); if (d) { this.errandLast[d.id] = r; this.queueMajor(() => this.offerViaRadio(d)); } }
     }
     // noticeboard: two errands, refreshed every 4 rounds
     if (r - this.boardRound >= T.errands.boardRefresh) {
@@ -99,6 +100,8 @@ export const ErrandMixin = {
     }
     // world triggers
     this.triggers = this.triggers.filter((t) => r <= t.until);
+    // v1.5 W1: the spool of wire behind the bar starts Wire the Town; it waits there until it's done
+    for (const d of this.eligible('pub')) if (!this.errandDoneIds[d.id] && !this.triggers.some((t) => t.id === d.id)) this.triggers.push({ id: d.id, at: d.offer.at, until: Infinity, sound: 1e9, quiet: true });
     if (r >= T.errands.worldFrom) {
       for (const d of this.eligible('world')) {
         if (d.id === 'trader' || this.triggers.some((t) => t.id === d.id)) continue;
@@ -287,7 +290,13 @@ export const ErrandMixin = {
     if (r.biscuit) this.adoptBiscuit(this.spot('dogShed'));
     if (r.bandage) { this.bandagesStock = Math.min(this.bandageCap(), this.bandagesStock + 1); if (this.hasComfort('bandages')) p.bandages = Math.min(this.bandageCap(), p.bandages + 1); }
     if (r.cure) { const s = this.survivors.find((x) => x.sick > 0 && !x.dead); if (s) { s.sick = 0; this.radio('Fever\'s broken. Thank you.', s.name); } }
-    if (r.effect === 'beacons') { this.beaconsLit = true; this.herdReduce = 0.75; this.emit('banner', { text: 'THE BEACONS ARE LIT', sub: 'The herd will be a quarter smaller' }); }
+    if (r.effect === 'beacons') {
+      this.beaconsLit = true; this.herdReduce = 0.75;
+      // v1.5 E1: pays 1.5x the Scrap the turned-away quarter would have dropped, so lighting them is never a loss
+      const turned = Math.round(T.round.count(this.round + 1) * T.specials.herdMult * 0.25), pay = Math.round(turned * (T.scrap.killMelee + 2 * T.scrap.hit) * T.beacons.payMult / 10) * 10;
+      this.addScrap(pay, this.p.x, this.p.y - 20, true, null, true); this.addParts(T.beacons.parts);
+      this.emit('banner', { prio: 'objective', key: 'beacons.lit', text: 'THE BEACONS ARE LIT', sub: `The herd will be a quarter smaller. Hilltop pays +${pay} Scrap, +${T.beacons.parts} Parts` });
+    }
     if (r.effect === 'sluice') { this.sluiceOpen = true; this.emit('banner', { text: 'THE UNDERPASS FLOODS', sub: 'The dead wade at 60% speed by the allotments' }); }
     if (r.effect === 'searchlight') { this.searchlightFixed = true; this.emit('banner', { text: 'THE SEARCHLIGHT RUNS ON BATTERIES', sub: 'No power needed. It marks specials on the field' }); }
     if (r.effect) this.errandEffect({ effect: r.effect });
@@ -297,6 +306,7 @@ export const ErrandMixin = {
   updateErrands(inp) {
     const p = this.p;
     this.prevInteract = inp.interact;
+    if (!this.spoolHinted && this.triggers.some((t) => t.id === 'wire') && this.inPub(this.p.x, this.p.y)) { this.spoolHinted = true; this.card({ key: 'hint.spool', prio: 'objective', text: 'A SPOOL OF WIRE BY THE BAR', sub: 'Hold F at it to start Wire the Town', pin: { x: this.map.spots.pub_spool.px, y: this.map.spots.pub_spool.py } }); }
     for (const t of this.triggers) { t.sound -= DT; if (t.sound <= 0) { t.sound = 4; const s = this.spot(t.at); this.emit(t.id === 'lostDog' ? 'barking' : t.id === 'cellar' ? 'knocking' : 'triggerPing', { x: s.px, y: s.py }); } }
     if (this.dropCrate) this.dropCrate.t += DT;
     this.noAttack = false;
@@ -330,6 +340,12 @@ export const ErrandMixin = {
               if (er.s.retries < (st.retries || 0)) { er.s.retries++; er.s.t = 0; er.s.out = 0; this.radio('Plane\'s going round again. Get back on the field.'); }
               else { this.failErrand(er, 'left'); break; }
             }
+          }
+          // v1.5 Z3: the flare keeps them coming. Never fewer than the minimum alive while you hold
+          if (st.minAlive) {
+            er.s.spawnT = (er.s.spawnT ?? 0) - DT;
+            const alive = this.enemies.filter((e) => !e.dead && !(e.ally > 0) && e.type !== 'looter').length, want = Math.max(st.minAlive, Math.round(T.round.activeCap(this.round) / 2));
+            if (alive < want && er.s.spawnT <= 0) { er.s.spawnT = T.flareSpawn.every; const e = this.spawnAtBarricade(this.rollBasic(), this.pickBarricade(true)); e.extra = true; e.noticed = true; }
           }
           if (er.s.t >= st.seconds) this.stepDone(er);
           break;
@@ -396,7 +412,7 @@ export const ErrandMixin = {
     out.push({ id: 'board', x: nb.px, y: nb.py - 10, menu: true, describe: () => this.boardOptions() });
     for (const t of this.triggers) {
       const s = this.spot(t.at), def = ERRAND[t.id];
-      out.push({ id: 'trig:' + t.id, x: s.px, y: s.py, describe: () => (this.mainErrand() ? { label: `${def.name}: finish your errand first`, cost: 0, disabled: true } : { label: `Investigate: ${def.name}`, cost: 0, holdTime: 0.4, action: () => this.acceptErrand(t.id), sub: def.brief }) });
+      out.push({ id: 'trig:' + t.id, x: s.px, y: s.py, describe: () => (this.mainErrand() ? { label: `${def.name}: finish your errand first`, cost: 0, disabled: true } : { label: t.quiet ? `Spool of wire: ${def.name}` : `Investigate: ${def.name}`, cost: 0, holdTime: 0.4, action: () => this.acceptErrand(t.id), sub: def.brief }) });
     }
     for (const er of this.errands) {
       const st = this.curStep(er); if (!st) continue;

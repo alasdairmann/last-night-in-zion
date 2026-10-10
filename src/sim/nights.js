@@ -8,6 +8,16 @@ const DT = T.dt;
 const hyp = Math.hypot;
 const BUILD_FIRE = ['HARDWARE', 'FIRE STATION', 'ST MARY\'S', 'ZION PRIMARY', 'POST OFFICE', 'PHARMACY', 'HUNT & TACKLE', 'GARAGE', 'SITE OFFICE'];
 
+// v1.5 T1: the dead that will come through in waves r..until (the minimum: each wave's base count)
+export function trialSupply(r, until) { let n = 0; for (let w = r; w <= until; w++) n += T.round.count(w); return n; }
+// Complete = 60% of the eligible kills split for a 2x master, so mastering never needs more than ~60% of them
+export function trialTarget(id, r, until) {
+  const d = TRIALS[id]; if (d.fixed) return d.fixed;
+  const n = Math.max(3, Math.floor(trialSupply(r, until) * d.share * 0.6 / 2));
+  return d.max ? Math.min(d.max, n) : n;
+}
+export function trialMasterable(id, r, until) { const d = TRIALS[id]; return !!d.fixed || trialTarget(id, r, until) * 2 <= trialSupply(r, until) * d.share; }
+
 export const NightsMixin = {
   initNights() {
     this.trial = null; this.lastTrial = null;
@@ -35,9 +45,12 @@ export const NightsMixin = {
   postTrial(r) {
     if (r < T.trials.fromRound || (r - T.trials.fromRound) % T.trials.every !== 0 || this.attract) return;
     const p = this.p;
-    const opts = Object.keys(TRIALS).filter((k) => k !== this.lastTrial && (k !== 'biscuit' || (this.biscuit && !this.biscuit.dead)) && (k !== 'weapon' || this.trialWeapon()));
+    const until = r + T.trials.every - 1;
+    // v1.5 T2: only trials that can be mastered (2x target) inside the window are ever posted
+    const opts = Object.keys(TRIALS).filter((k) => k !== this.lastTrial && (k !== 'biscuit' || (this.biscuit && !this.biscuit.dead)) && (k !== 'weapon' || this.trialWeapon()) && trialMasterable(k, r, until));
+    if (!opts.length) return;
     const id = this.rng.pick(opts);
-    const t = { id, n: 0, target: TRIALS[id].target(r), until: r + T.trials.every - 1, tier: 0 };
+    const t = { id, n: 0, target: trialTarget(id, r, until), until, tier: 0 };
     if (id === 'weapon') t.w = this.trialWeapon();
     if (id === 'zone') t.z = this.rng.pick([...this.openZones]);
     this.trial = t; this.lastTrial = id;
@@ -224,7 +237,7 @@ export const NightsMixin = {
       if (this.stormFuseT > 0) { this.stormFuseT -= DT; if (this.stormFuseT <= 0) this.blowFuse('storm'); }
     }
     if (this.lightningT > 0) this.lightningT -= DT;
-    if (this.eventRoll > 0 && this.t >= this.eventRoll && this.state === 'active') { this.eventRoll = -1; this.startEvent(); }
+    if (this.eventRoll > 0 && this.t >= this.eventRoll && this.state === 'active' && this.majorReady()) { this.eventRoll = -1; this.majorMark(); this.startEvent(); } // v1.5 P1
     const ev = this.event; if (!ev) return;
     ev.t += DT;
     switch (ev.kind) {

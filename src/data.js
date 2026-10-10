@@ -220,16 +220,18 @@ export const KEEPSAKES = {
 };
 
 // §15 Trials (the noticeboard posts one every other round from wave 4)
+// v1.5 T1/T2: targets come from the dead expected in the trial's window (see trialTarget in sim/nights.js).
+// share = the fraction of those kills the player can reasonably make eligible; fixed = a target not tied to kills.
 export const TRIALS = {
-  melee: { name: 'Kill {n} with melee', target: (r) => 25 + 2 * r },
-  crit: { name: 'Kill {n} with critical hits', target: (r) => 10 + r },
-  weapon: { name: 'Kill {n} with the {w}', target: (r) => 15 + r },
-  zone: { name: 'Kill {n} in {z}', target: (r) => 20 + r },
-  planks: { name: 'Repair {n} planks', target: () => 20 },
-  untouched: { name: 'Kill {n} without being hit', target: () => 15 },
-  boom: { name: 'Kill {n} with explosives or fire', target: () => 12 },
-  quiet: { name: 'Kill {n} while noise is under 20', target: () => 30 },
-  biscuit: { name: 'Kill {n} that Biscuit pinned', target: () => 10 },
+  melee: { name: 'Kill {n} with melee', share: 0.9 },
+  crit: { name: 'Land {n} critical kills: strike staggered or pinned dead', share: 0.5 }, // v1.5 T3: crits come from staggers, not luck
+  weapon: { name: 'Kill {n} with the {w}', share: 0.8 },
+  zone: { name: 'Kill {n} in {z}', share: 0.6 },
+  planks: { name: 'Repair {n} planks', fixed: 20 },
+  untouched: { name: 'Kill {n} without being hit', share: 0.6, max: 15 },
+  boom: { name: 'Kill {n} with explosives or fire', share: 0.4, max: 12 },
+  quiet: { name: 'Kill {n} while noise is under 20', share: 0.6, max: 30 },
+  biscuit: { name: 'Kill {n} that Biscuit pinned', share: 0.35, max: 10 },
 };
 
 // §16 Weather

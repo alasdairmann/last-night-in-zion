@@ -67,21 +67,27 @@ export const EscapeMixin = {
   updateEscape() {
     const E = this.escape, p = this.p;
     if (E.stage === 'parts' && E.chiefOut && !this.enemies.some((e) => !e.dead && e.mark === 'chief') && !this.worldItems.some((w) => w.item === 'keys')) E.chiefOut = false;
+    if ((E.stage === 'stand' || E.stage === 'drive') && this.biscuit && !this.biscuit.dead && !this.biscuit.onTruck && (this.biscuit.down || this.biscuit.hp < this.biscuit.maxHp * T.truckRoof.dogAt)) this.biscuit.toTruck = true;
     if (E.stage === 'stand') {
       if (this.zoneAt(p.x, p.y) === 3 && !p.dead) E.standT += DT;
       if (!E.bruteSent && E.standT >= Math.min(T.escape.bruteAt, E.standLen / 2)) { E.bruteSent = true; this.pending.push({ t: 1, type: 'brute', counted: true, bar: this.pickBarricade(true) }); this.emit('bruteWarn', { x: p.x, y: p.y }); }
       if (E.standT >= E.standLen) { E.stage = 'drive'; this.emit('engineStart', { x: E.ex, y: E.ey }); this.emit('banner', { prio: 'critical', key: 'escape.drive', pin: { x: this.map.spots.engine_cab.px, y: this.map.spots.engine_cab.py }, text: 'THE ENGINE IS RUNNING', sub: 'Get in the cab!' }); }
     }
     if (E.stage === 'gone') {
-      E.driveT += DT;
-      const k = Math.min(1, E.driveT / T.escape.driveTime);
-      const pts = [[this.map.engine.px, this.map.engine.py], [this.map.engine.px, 32 * 16 + 8], [-60, 32 * 16 + 8]];
-      const seg = k < 0.2 ? 0 : 1, kk = seg === 0 ? k / 0.2 : (k - 0.2) / 0.8;
-      const a = pts[seg], b = pts[seg + 1];
-      E.ex = a[0] + (b[0] - a[0]) * kk; E.ey = a[1] + (b[1] - a[1]) * kk;
+      E.driveT += DT; E.oex = E.ex; E.oey = E.ey;
+      // v1.5 L2: one smooth eased run along the road (pull out, turn, then away and off the map), not two linear hops
+      const k = Math.min(1, E.driveT / T.escape.driveTime), eased = k * k * (3 - 2 * k) * 0.35 + k * k * 0.65;
+      const pts = [[this.map.engine.px, this.map.engine.py], [this.map.engine.px, 32 * 16 + 8], [-80, 32 * 16 + 8]];
+      const segs = [hyp(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]), hyp(pts[2][0] - pts[1][0], pts[2][1] - pts[1][1])];
+      let d = eased * (segs[0] + segs[1]), seg = d <= segs[0] ? 0 : 1; if (seg) d -= segs[0];
+      const a = pts[seg], b = pts[seg + 1], kk = Math.min(1, d / segs[seg]);
+      E.ex = a[0] + (b[0] - a[0]) * kk; E.ey = a[1] + (b[1] - a[1]) * kk; E.dir = seg ? -1 : 1;
       p.ox = p.x; p.oy = p.y; p.x = E.ex; p.y = E.ey;
-      for (const e of this.enemies) if (!e.dead && hyp(e.x - E.ex, e.y - E.ey) < 26) { this.knock(e, 30, E.ex, E.ey); e.stagger = 1; this.damageEnemy(e, 200, { kind: 'explosion', x: E.ex, y: E.ey, noScrap: true }); }
-      if (k >= 1 && !E.done) { E.done = true; this.state = 'escaped'; this.emit('escaped', { round: this.round }); }
+      for (const r of this.truckRiders()) { const st = r === this.biscuit ? this.truckSeat(5) : this.truckSeat(r.seat || 0); r.ox = r.x; r.oy = r.y; r.x = st.x; r.y = st.y; }
+      if (Math.floor(E.driveT * 20) !== Math.floor((E.driveT - DT) * 20)) this.emit('exhaust', { x: E.ex - (E.dir || 1) * 30, y: E.ey + 10, k });
+      for (const e of this.enemies) if (!e.dead && hyp(e.x - E.ex, e.y - E.ey) < 26) { this.knock(e, 30, E.ex, E.ey); e.stagger = 1; this.damageEnemy(e, 200, { kind: 'explosion', x: E.ex, y: E.ey, noScrap: true, silent: true }); }
+      if (k >= 1) E.holdT = (E.holdT || 0) + DT; // a beat on the empty road before the outro
+      if (E.holdT >= T.escape.finalHold && !E.done) { E.done = true; this.state = 'escaped'; this.emit('escaped', { round: this.round }); }
     }
   },
   escapeInteractables(out) {
@@ -99,7 +105,12 @@ export const EscapeMixin = {
       if (next) out.push({ id: 'esc:fit', x: eng.px, y: eng.py, range: 30, cancelOnHit: true, describe: () => ({ label: { battery: 'Fit the battery', tyre: 'Fit the tyre', fuel: 'Prime the fuel line' }[next], cost: 0, holdTime: T.escape.fitHold, action: () => { E.fitted[next] = true; this.fitBurst(); }, sub: 'It will make a racket' }) });
       else out.push({ id: 'esc:call', x: eng.px, y: eng.py, range: 30, describe: () => ({ label: 'Call it in on the engine radio', cost: 0, holdTime: 1, action: () => this.startLastStand(), sub: 'There\'s no going back after this' }) });
     }
-    if (E.stage === 'drive') out.push({ id: 'esc:drive', x: sp.engine_cab.px, y: sp.engine_cab.py, range: 30, describe: () => ({ label: 'DRIVE', cost: 0, holdTime: 1, action: () => { this.resolveCard('escape.drive'); E.stage = 'gone'; E.driveT = 0; p.invuln = 99; p.inEngine = true; this.emit('drive', {}); }, sub: 'Get out of Zion' }) });
+    if (E.stage === 'drive') out.push({ id: 'esc:drive', x: sp.engine_cab.px, y: sp.engine_cab.py, range: 30, describe: () => ({ label: 'DRIVE', cost: 0, holdTime: 1, action: () => { this.resolveCard('escape.drive'); E.stage = 'gone'; E.driveT = 0; E.oex = E.ex; E.oey = E.ey; p.invuln = 99; p.inEngine = true; this.boardTruck(); this.emit('drive', {}); }, sub: 'Get out of Zion' }) });
+  },
+  // v1.5 L4: when you drive, every living companion is aboard: survivors still running are pulled up, Biscuit jumps on
+  boardTruck() {
+    for (const sv of this.survivors) if (!sv.dead && (sv.state === 'truck' || sv.state === 'home' || sv.state === 'escort')) { if (sv.state !== 'truck') sv.seat = this.truckRiders().length; sv.state = 'truck'; sv.roof = true; }
+    const b = this.biscuit; if (b && !b.dead) { b.onTruck = true; b.down = false; }
   },
   startLastStand() {
     const E = this.escape;
@@ -109,6 +120,34 @@ export const EscapeMixin = {
     this.radio(E.standLen === 45 ? 'Forty-five seconds. Hold on.' : RADIO.callIn);
     this.emit('banner', { prio: 'objective', key: 'escape.stand', text: 'THE LAST STAND', sub: `Hold the fire station for ${E.standLen} s`, danger: true });
     this.emit('lastStand', {});
+    // v1.5 L3: everyone at the Red Lion runs for the engine and climbs on the roof
+    this.homeSurvivors().forEach((sv, i) => { sv.state = 'truck'; sv.seat = i; sv.roof = false; });
+    if (this.homeSurvivors().length || this.survivors.some((sv) => sv.state === 'truck')) this.radio('We\'re coming to you. Keep the engine running.', (this.survivors.find((sv) => sv.state === 'truck') || {}).name || 'Hilltop');
+  },
+  // v1.5 L4: where a rider sits on the roof (survivors in a row along the ladder, Biscuit by the cab)
+  truckSeat(i) { const E = this.escape, dir = E.dir || 1; return { x: E.ex + dir * (-20 + (i % 5) * 9), y: E.ey - 12 - Math.floor(i / 5) * 4 }; },
+  truckRiders() { const out = this.survivors.filter((sv) => !sv.dead && sv.state === 'truck'); if (this.biscuit && !this.biscuit.dead && this.biscuit.onTruck) out.push(this.biscuit); return out; },
+  // the roof: survivors fire on the dead; nothing reaches them up there
+  truckAI(sv) {
+    const E = this.escape;
+    if (!sv.roof) {
+      const tx = E.ex, ty = E.ey + 22;
+      if (hyp(tx - sv.x, ty - sv.y) < 26 || E.stage === 'gone') { sv.roof = true; this.emit('climb', { x: sv.x, y: sv.y }); }
+      else { this.npcStep(sv, tx, ty, T.truckRoof.run, this.lureField({ id: 'engine', x: tx, y: ty })); return; }
+    }
+    const st = this.truckSeat(sv.seat || 0); sv.x = st.x; sv.y = st.y;
+    if (E.stage === 'gone') return;
+    if (sv.weapon) { this.survivorShoot(sv); return; }
+    sv.atkCD -= DT;
+    let best = null, bd = T.truckRoof.range;
+    for (const e of this.enemies) { if (e.dead || e.ally > 0 || e.state !== 'inside') continue; const d = hyp(e.x - sv.x, e.y - sv.y); if (d < bd) { bd = d; best = e; } }
+    if (!best) return;
+    sv.fx = (best.x - sv.x) / (bd || 1); sv.fy = (best.y - sv.y) / (bd || 1);
+    if (sv.atkCD <= 0) {
+      sv.atkCD = T.truckRoof.every;
+      this.damageEnemy(best, T.truckRoof.dmg, { kind: 'survivor', x: sv.x, y: sv.y, noHitScrap: true, noScrap: true });
+      this.emit('survivorShot', { x1: sv.x, y1: sv.y - 8, x2: best.x, y2: best.y - 8, id: 'revolver' });
+    }
   },
   // spawning while the round counter is stopped (§7.3 step 7)
   updateLastStand() {
