@@ -1,7 +1,34 @@
-# Enoch Nights
+# Last Night in Zion
 
-Single-player, top-down, round-based horde survival, played on the keyboard. Built from `PRD.md`.
-Vanilla JavaScript ES modules, HTML5 canvas, Web Audio. No dependencies and no build step.
+**▶ Play it in your browser: https://alasdairmann.github.io/last-night-in-zion/**
+
+No download or install. It runs in any desktop browser and you play it with the keyboard.
+
+## Premise
+
+For a year Cain and his partner lived in Zion in total silence, because the dead hunt by sound. Tonight his partner shot themself. The shot woke the town, and every noise since has brought more of the dead in from the fields and woods.
+
+This is Cain's last night in Zion, a small English-American town about a year after the outbreak. It's a prequel to *Project Enoch*.
+
+## Genre
+
+Single-player, top-down, round-based horde survival in chunky pixel art. It plays like Call of Duty Zombies with a *Walking Dead* tone: grounded, improvised and quiet. Gunfire is loud and ammo is rare, so melee weapons do most of the work.
+
+## Goal
+
+Survive as many rounds as you can. Each round brings more of the dead. Kill them for **Scrap**, then spend it to:
+
+- buy weapons and ammo
+- repair barricades
+- open doors into more of the town
+- start the generator
+- buy comforts and workshop upgrades
+
+The rounds never end. Your score is how long you last.
+
+## Running it locally
+
+Vanilla JavaScript ES modules, HTML5 canvas and Web Audio. No dependencies and no build step.
 
 ```
 npm start        # http://localhost:4174
