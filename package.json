@@ -1,0 +1,12 @@
+{
+  "name": "enoch-nights",
+  "version": "1.1.0",
+  "description": "Last Night in Zion: top-down, keyboard-only, round-based horde survival (prequel to Project Enoch).",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js",
+    "sim": "node scripts/simulate-rounds.js"
+  }
+}

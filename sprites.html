@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- Dev sheet for the art pass (ART-PRD): every character at 1x and 3x, day and night. ?k=kind,kind&s=3
+     ?doors=1 lays every building front side by side and flags near-black clusters (12+ px) on a door (v1.4 H2).
+     ?crowd=<outfit> draws 20 walkers in one outfit plus a corpse field (VA-1, VA-7); add &before=1 for look seed 0 / pose 0 only. -->
+<meta charset="utf-8"><title>Sprite sheet</title>
+<style>body{background:#1d2a22;color:#e8dfc6;font:12px monospace;margin:16px}canvas{image-rendering:pixelated;display:block;margin:4px 0 12px}</style>
+<div id="out"></div>
+<script type="module">
+import { charSprite, corpseSprite } from './src/render/sprites.js';
+const q = new URLSearchParams(location.search);
+const ALL = ['cain', 'cain1', 'cain2', 'cain3', ...Array.from({ length: 12 }, (_, i) => 'walker@' + i), 'runner', 'bloater', 'armoured', 'tangled', 'screamer', 'hazmat', 'brute', 'butcher', 'looter', 'raider', 'raider:captain',
+  'survivor:medic', 'survivor:mechanic@1', 'survivor:cook@2', 'survivor:lookout@3', 'survivor:scavenger', 'survivor:fighter:sh@1', 'crawler', 'dog', 'dog@99', 'biscuit'];
+if (q.has('doors')) {
+  const { buildMap } = await import('./src/map/town.js'), { buildStatic, doorRects } = await import('./src/render/mapart.js');
+  const map = buildMap(), st = buildStatic(map), S = 3, out = document.getElementById('out');
+  const sx = st.getContext('2d'), list = document.createElement('pre'); let flagged = 0;
+  for (const r of doorRects(map)) {
+    const c = document.createElement('canvas'); c.width = r.face.w * S; c.height = r.face.h * S;
+    const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(st, r.face.x + st.ox, r.face.y + st.oy, r.face.w, r.face.h, 0, 0, r.face.w * S, r.face.h * S);
+    // dark clusters touching the door (with an 8 px margin)
+    const m = 8, d = sx.getImageData(r.door.x - m + st.ox, r.door.y - m + st.oy, r.door.w + 2 * m, r.door.h + 2 * m), W = d.width, H = d.height, seen = new Uint8Array(W * H);
+    const dark = (i) => d.data[i * 4 + 3] > 200 && d.data[i * 4] < 0x1c && d.data[i * 4 + 1] < 0x1c && d.data[i * 4 + 2] < 0x22;
+    const bad = [];
+    for (let i = 0; i < W * H; i++) { if (seen[i] || !dark(i)) continue; let q2 = [i], n = 0; seen[i] = 1; while (q2.length) { const j = q2.pop(); n++; for (const k of [j - 1, j + 1, j - W, j + W]) if (k >= 0 && k < W * H && !seen[k] && dark(k)) { seen[k] = 1; q2.push(k); } } if (n >= 12) bad.push(n); }
+    x.strokeStyle = bad.length ? '#ff3a2a' : '#6cbf4a'; x.lineWidth = 2; x.strokeRect((r.door.x - r.face.x) * S, (r.door.y - r.face.y) * S, r.door.w * S, r.door.h * S);
+    if (bad.length) flagged++;
+    out.append(Object.assign(document.createElement('div'), { textContent: `${r.name}: ${bad.length ? 'DARK CLUSTER ' + bad.join(', ') + ' px' : 'ok'}` }), c);
+  }
+  out.prepend(Object.assign(document.createElement('h3'), { textContent: `Door audit: ${flagged} flagged` }));
+  throw 0;
+}
+if (q.has('crowd')) {
+  const S = +(q.get('s') || 3), o = +q.get('crowd'), before = q.has('before');
+  const c = document.createElement('canvas'); c.width = 230 * S; c.height = 110 * S;
+  const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.scale(S, S); x.fillStyle = '#3f5a34'; x.fillRect(0, 0, 230, 110);
+  for (let i = 0; i < 20; i++) { // 2 rows of 10, mixed views and gaits as in a horde
+    const look = before ? 0 : i % 4, g = [1, 0, 2, 1, 1][i % 5], v = [0, 1, 0, 2, 0, 1, 3][i % 7];
+    x.drawImage(charSprite(`walker:g${g}${look ? ':l' + look : ''}`, o, v, i % 4, 'walk'), 4 + (i % 10) * 22, 4 + Math.floor(i / 10) * 30);
+  }
+  for (let i = 0; i < 12; i++) { // the corpse field: 3 poses x mirror x two outfits
+    const spr = corpseSprite('walker', (o + (i >> 2)) % 12, 'n', before ? 0 : i % 3), cx = 12 + (i % 6) * 36, cy = 76 + Math.floor(i / 6) * 16;
+    x.fillStyle = '#4a1814'; x.fillRect(cx - 5, cy + 6, 14, 3);
+    if (!before && i % 2) { x.save(); x.translate(cx + 16, 0); x.scale(-1, 1); x.drawImage(spr, 0, cy); x.restore(); } else x.drawImage(spr, cx, cy);
+  }
+  document.getElementById('out').append(c); throw 0;
+}
+const kinds = (q.get('k') || ALL.join(',')).split(',');
+const S = +(q.get('s') || 3);
+const out = document.getElementById('out');
+const c = document.createElement('canvas'), cw = 26, ch = 32;
+const cols = 5 + 4 + 2 + 2 + 5;
+c.width = (cols * cw + 8) * S; c.height = kinds.length * ch * S;
+const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.scale(S, S);
+kinds.forEach((spec, row) => {
+  const [k, o = '0'] = spec.split('@'), outfit = +o, y = row * ch;
+  const flat = k === 'crawler' || k.startsWith('dog') || k === 'biscuit';
+  const put = (spr, col) => x.drawImage(spr, col * cw + 2, y + ch - 2 - spr.height);
+  for (let v = 0; v < 5; v++) put(charSprite(k, outfit, flat ? 0 : v, 0, 'walk'), v);
+  for (let f = 0; f < 4; f++) put(charSprite(k, outfit, flat ? 0 : 1, f, 'walk'), 5 + f);
+  put(charSprite(k, outfit, flat ? 0 : 0, 0, 'attack'), 9); put(charSprite(k, outfit, flat ? 0 : 2, 0, 'attack'), 10);
+  if (k === 'biscuit') put(charSprite(k, 0, 0, 0, 'down'), 11);
+  else if (k.startsWith('cain')) { put(charSprite(k, 0, 0, 0, 'carry'), 11); put(charSprite(k, 0, 2, 0, 'charge'), 12); }
+  else if (!k.startsWith('survivor') && k !== 'looter' && !k.startsWith('raider')) { for (const [m, col] of [['n', 11], ['char', 12]]) put(corpseSprite(k.split(':')[0].replace(/@.*/, ''), outfit, m), col); }
+  x.fillStyle = '#10141c'; x.fillRect(13 * cw, y, 5 * cw + 8, ch);
+  for (let v = 0; v < 5; v++) put(charSprite(k, outfit, flat ? 0 : v, 0, 'walk', 's'), 13 + v);
+});
+out.append(Object.assign(document.createElement('div'), { textContent: 'cols: S SE E NE N | SE walk x4 | attack S, E | extra (carry/charge or corpses) | night' }), c);
+</script>

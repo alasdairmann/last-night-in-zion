@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- Dev view for the art pass: one real game frame at night with the generator on.
+     ?x=<tile>&y=<tile> puts Cain there, &n=<enemies> scatters walkers round him, &power=0 turns the generator off, &wave=1 marks a wave as running, &mast=1 the booster as built.
+     The draw time (mean of 120 draws) is printed under the frame, and in document.title. -->
+<meta charset="utf-8"><title>Night view</title>
+<style>body{margin:0;background:#000;color:#e8dfc6;font:12px monospace}canvas{image-rendering:pixelated;display:block}</style>
+<canvas id="screen"></canvas><div id="t"></div>
+<script type="module">
+import { Game } from './src/sim/game.js';
+import { Renderer } from './src/render/renderer.js';
+import { T } from './src/tuning.js';
+const q = new URLSearchParams(location.search), n = +(q.get('n') || 0);
+const g = new Game({ seed: +(q.get('seed') || 1) });
+const r = new Renderer(document.getElementById('screen'), { flashing: 'full', hitStop: false });
+r.resize(); r.setGame(g);
+g.power = q.get('power') !== '0'; if (q.has('wave')) g.state = 'active'; if (q.has('mast')) g.mastRepaired = true; g.fuel = 99; g.everPowered = true;
+g.p.x = (+(q.get('x') || 48) + 0.5) * 16; g.p.y = (+(q.get('y') || 32) + 0.5) * 16;
+for (let i = 0; i < n; i++) {
+  const e = g.makeEnemy(q.get('type') || 'walker'), a = i * 2.39996, d = 24 + Math.sqrt(i) * 14;
+  e.x = e.ox = g.p.x + Math.cos(a) * d; e.y = e.oy = g.p.y + Math.sin(a) * d * 0.7;
+  e.state = 'inside'; e.moving = true; e.fx = -Math.cos(a); e.fy = -Math.sin(a); g.enemies.push(e);
+}
+r.snapCamera(g);
+for (let i = 0; i < 30; i++) r.update(g, T.dt, true);
+r.draw(g, 1, {});
+const t0 = performance.now(); for (let i = 0; i < 120; i++) r.draw(g, 1, {}); const ms = (performance.now() - t0) / 120;
+document.getElementById('t').textContent = document.title = `draw ${ms.toFixed(2)} ms, ${g.enemies.length} enemies`;
+</script>

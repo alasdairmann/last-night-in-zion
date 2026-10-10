@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- Dev view for the art pass: the baked town at ?s=scale&x=px&y=py (no lighting). x/y are map pixels and may be negative (the apron). -->
+<meta charset="utf-8"><title>Map view</title>
+<style>body{margin:0;background:#000}canvas{image-rendering:pixelated;display:block}</style>
+<canvas id="c"></canvas>
+<script type="module">
+import { buildMap } from './src/map/town.js';
+import { buildStatic } from './src/render/mapart.js';
+const q = new URLSearchParams(location.search), s = +(q.get('s') || 2), x0 = +(q.get('x') || 0), y0 = +(q.get('y') || 0);
+const sm = buildStatic(buildMap());
+const c = document.getElementById('c'); c.width = innerWidth; c.height = innerHeight;
+const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+x.drawImage(sm, x0 + (sm.ox || 0), y0 + (sm.oy || 0), c.width / s, c.height / s, 0, 0, c.width, c.height);
+</script>
