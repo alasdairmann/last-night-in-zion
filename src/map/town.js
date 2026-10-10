@@ -157,7 +157,7 @@ const TRAPS = [
 ];
 const DECOR = [
   ['banner', 48, 22.2], ['trolley', 61, 30], ['bicycle', 35, 29.5], ['pram', 57, 35], ['binbags', 45, 28], ['binbags', 62, 41],
-  ['binbags', 21, 30], ['trolley', 30, 50], ['bicycle', 36, 52], ['sand', 75, 15], ['sand', 88, 17], ['scaffold', 74, 4],
+  ['binbags', 21, 30], ['trolley', 30, 50], ['bicycle', 36, 52], ['sand', 75, 15], ['sand', 88, 17], ['scaffold', 69, 6.5],
   ['bed', 82, 48], ['bed', 82, 51], ['bed', 86, 50], ['bed', 90, 47], ['bed', 90, 50], ['flowers', 13, 18], ['bench', 20, 17],
   ['bench', 41, 30], ['bunting', 0, 0],
 ];
@@ -204,7 +204,9 @@ export function buildMap() {
   fillG(43, 29, 53, 35, G.PAVE);            // the square
   fillG(2, 31, 93, 33, G.ROAD);             // high street (E-W)
   fillG(47, 2, 49, 61, G.ROAD);             // the crossroads (N-S)
-  fillG(33, 28, 63, 28, G.PAVE); fillG(33, 36, 63, 36, G.PAVE);
+  for (const y of [28, 36]) { fillG(33, y, 46, y, G.PAVE); fillG(50, y, 63, y, G.PAVE); } // v1.6: the pavements stop at the kerb, not across Station Road / School Lane
+  fillG(36, 34, 39, 34, G.PAVE);            // v1.6: a lay-by under the car parked off the High Street
+  fillG(85, 34, 89, 40, G.GRAVEL);          // v1.6: a gravel pull-in for the tow truck, not grass
 
   // buildings
   const buildings = BUILDINGS.map((b) => ({ ...b }));
