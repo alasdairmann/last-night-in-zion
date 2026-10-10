@@ -23,11 +23,12 @@ export function doorRects(map) {
     return { name: b.name || `${b.kind} at ${b.x},${b.y}`, face: { x: px, y: fy - 12, w, h: TS + 30 }, door: { x: px + w - TS * 2 - 3, y: fy + 3, w: 14, h: 22 } };
   });
 }
+export const MAP_HD = 2; // the static map is baked at 2x so ground and buildings can carry half-pixel detail
 export function buildStatic(map) {
   const W = map.W, H = map.H;
   // S3: the canvas carries a MARGIN-tile apron on every side; c.ox / c.oy is where map pixel (0, 0) sits
-  const c = makeCanvas((W + 2 * MARGIN) * TS, (H + 2 * MARGIN) * TS); const ctx = c.getContext('2d');
-  c.ox = c.oy = MARGIN * TS; ctx.translate(c.ox, c.oy);
+  const c = makeCanvas((W + 2 * MARGIN) * TS * MAP_HD, (H + 2 * MARGIN) * TS * MAP_HD); const ctx = c.getContext('2d');
+  c.ox = c.oy = MARGIN * TS; ctx.scale(MAP_HD, MAP_HD); ctx.translate(c.ox, c.oy);
   drawApron(ctx, map);
   const rng = new RNG(1234);
   const R = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
@@ -37,7 +38,7 @@ export function buildStatic(map) {
   const isRoad = (g) => g === G.ROAD || g === G.TARMAC || g === G.BYPASS;
 
   // ---- ground (D4) ----
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) groundTile(ctx, Gd(x, y), x, y, rng, Gd, isRoad);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { groundTile(ctx, Gd(x, y), x, y, rng, Gd, isRoad); groundHD(ctx, Gd(x, y), x, y, isRoad); }
   // road markings: faded, with gaps where worn
   for (let x = 2; x < 94; x += 2) if (rng.next() > 0.12) { const wx = x * TS + 2, wy = 32 * TS + 7; R(wx, wy, 10, 2, '#c8bf9a'); R(wx + rng.int(1, 8), wy, 2, 1, '#8a8676'); R(wx + rng.int(1, 8), wy + 1, 1, 1, '#6e6c66'); }
   for (let y = 2; y < 62; y += 2) if ((y < 31 || y > 33) && rng.next() > 0.12) { const wx = 48 * TS + 7, wy = y * TS + 2; R(wx, wy, 2, 10, '#c8b860'); R(wx, wy + rng.int(1, 8), 1, 2, '#8a8460'); }
@@ -189,6 +190,35 @@ function groundTile(ctx, g, x, y, rng, Gd, isRoad) {
     default: for (let k = 0; k < 6; k++) R(px + ri(0, 13), py + ri(0, 13), 2 + ri(0, 1), 2, pal[1 + ri(0, 1)]);
   }
 }
+// Half-pixel ground detail (h = 0.5 map px = 1 HD px), seeded per tile so the 1x layout above is untouched.
+function groundHD(ctx, g, x, y, isRoad) {
+  const r = new RNG((x * 73856093) ^ (y * 19349663) ^ 0x5bd1e995), h = 0.5;
+  const H = (a, b, c, w = h, ht = h) => { ctx.fillStyle = c; ctx.fillRect(a, b, w, ht); };
+  const px = x * TS, py = y * TS, rx = () => px + r.int(0, 31) * h, ry = () => py + r.int(0, 31) * h;
+  if (isRoad(g)) { // fine aggregate: light and dark grit
+    for (let k = 0; k < 14; k++) H(rx(), ry(), k % 3 ? '#4a4e52' : '#5e6266');
+    for (let k = 0; k < 8; k++) H(rx(), ry(), '#2a2d30');
+    return;
+  }
+  switch (g) {
+    case G.GRASS: case G.GRAVE: case G.FIELD: case G.WOODS: { // thin blades between the tufts, a few lit tips
+      const gr = g === G.WOODS ? ['#24501e', '#3a7a30', '#5a9a46'] : [RAMP.grass[2], RAMP.grass[1], RAMP.grass[0]];
+      for (let k = 0; k < 16; k++) { const a = rx(), b = ry(); H(a, b, gr[0], h, 1); H(a + (k % 2 ? h : -h), b - h, gr[1]); if (k % 4 === 0) H(a, b - 1, gr[2]); }
+      break;
+    }
+    case G.PAVE: // slab bevels and chips
+      for (const [sx, sy] of [[0, 0], [8, 0], [0, 8], [8, 8]]) { H(px + sx, py + sy + 0.5, '#b8b4a8', 7, h); H(px + sx + 0.5, py + sy + 6.5, '#7e7a70', 6.5, h); }
+      for (let k = 0; k < 4; k++) H(rx(), ry(), '#8a867a');
+      break;
+    case G.YARD: case G.SOIL: case G.FARM: case G.GRAVEL: { // pebbles with a lit top and a shadow under
+      const D = RAMP.dirt, n = g === G.GRAVEL ? 10 : 5;
+      for (let k = 0; k < n; k++) { const a = rx(), b = ry(); H(a, b, D[0], 1, h); H(a, b + h, D[2], 1, h); }
+      break;
+    }
+    case G.FLOORBOARD: for (let j = 0; j < TS; j += 4) { H(px, py + j + 1.5, 'rgba(60,40,24,0.35)', TS, h); H(px + r.int(0, 12), py + j + 0.5, 'rgba(255,240,210,0.12)', 3, h); } break;
+    case G.RIVER: for (let k = 0; k < 4; k++) H(rx(), ry(), '#b8d8ea', 1.5, h); break;
+  }
+}
 function crack(R, x, y, rng, c) {
   let cx = x, cy = y;
   for (let i = 0; i < 8; i++) { R(cx, cy, 1, 1, c); cy += 1; cx += rng.int(-1, 1); if (i === 3) { let bx = cx, by = cy; for (let j = 0; j < 3; j++) { bx += 1; by += rng.int(0, 1); R(bx, by, 1, 1, c); } } }
@@ -268,12 +298,12 @@ function building(ctx, b, rng) {
 function wallFace(ctx, R, kind, x, y, w, h, rng) {
   if (kind === 'brick') {
     const B = RAMP.brick; R(x, y, w, h, RAMP.mortar);
-    for (let r = 0; r < h / 2; r++) { const yy = y + r * 2; for (let i = (r % 2) * 2 - 2; i < w; i += 5) { const bx = Math.max(x, x + i), bw = Math.min(4, x + i + 4 - bx, x + w - bx); if (bw > 0) R(bx, yy, bw, 1, B[(rng.int(0, 5) + r) % 3]); } }
+    for (let r = 0; r < h / 2; r++) { const yy = y + r * 2; for (let i = (r % 2) * 2 - 2; i < w; i += 5) { const bx = Math.max(x, x + i), bw = Math.min(4, x + i + 4 - bx, x + w - bx); if (bw > 0) { R(bx, yy, bw, 1, B[(rng.int(0, 5) + r) % 3]); R(bx, yy, bw, 0.5, 'rgba(255,230,200,0.14)'); R(bx + bw - 0.5, yy, 0.5, 1, 'rgba(0,0,0,0.18)'); } } } // HD: each brick lit on top, shadowed at its end
   } else if (kind === 'stone') { // big irregular blocks, dark mortar
     R(x, y, w, h, '#5a564e');
     for (let r = 0; r < h; r += 5) { let i = -rng.int(0, 6); while (i < w) { const bw = rng.int(6, 11), c = ['#8a8578', '#9a958a', '#7a766a'][rng.int(0, 2)]; const bx = Math.max(x, x + i), bww = Math.min(bw - 1, x + w - bx); if (bww > 0) { R(bx, y + r, bww, 4, c); R(bx, y + r, bww, 1, shade(c, 0.15)); } i += bw; } }
-  } else if (kind === 'tin') { R(x, y, w, h, '#9aa3a8'); for (let i = 0; i < w; i += 3) R(x + i, y, 1, h, '#6f787d'); R(x, y + h - 4, w, 4, '#8a949a'); }
-  else { R(x, y, w, h, '#8f6a3e'); for (let j = 0; j < h; j += 3) { R(x, y + j, w, 1, '#6a4a2e'); R(x, y + j + 1, w, 1, '#a8804e'); } } // timber cladding
+  } else if (kind === 'tin') { R(x, y, w, h, '#9aa3a8'); for (let i = 0; i < w; i += 3) { R(x + i, y, 1, h, '#6f787d'); R(x + i + 1, y, 0.5, h, '#c0c8cc'); } R(x, y + h - 4, w, 4, '#8a949a'); }
+  else { R(x, y, w, h, '#8f6a3e'); for (let j = 0; j < h; j += 3) { R(x, y + j, w, 1, '#6a4a2e'); R(x, y + j + 1, w, 1, '#a8804e'); R(x, y + j + 1, w, 0.5, '#bc9460'); for (let i = (j * 7) % 11; i < w; i += 11) R(x + i, y + j + 2, 3, 0.5, '#7e5a36'); } } // timber cladding, HD grain
   R(x, y, w, 2, 'rgba(255,240,220,0.12)'); R(x, y + h - 2, w, 2, 'rgba(0,0,0,0.3)');
   for (let k = 0; k < w / 40; k++) { const sx = x + rng.int(2, w - 4); R(sx, y + 2, 1, rng.int(5, 12), 'rgba(40,30,20,0.25)'); } // stains running down
   if (rng.next() < 0.5) { let cx = x + rng.int(10, w - 10), cy = y + 3; for (let i = 0; i < 6; i++) { R(cx, cy, 1, 1, 'rgba(30,20,15,0.5)'); cy++; cx += rng.int(-1, 1); } } // a crack
@@ -283,10 +313,12 @@ function window_(R, x, y, boarded, rng) {
   R(x - 2, y + 9, 14, 2, '#d8d0b8'); R(x - 2, y + 10, 14, 1, '#8a857a'); // sill
   if (boarded) { R(x - 1, y + 2, 12, 2, '#c49a62'); R(x - 1, y + 2, 12, 1, '#d8b07a'); R(x - 1, y + 6, 12, 2, '#b08a58'); R(x, y + 3, 1, 1, '#5a3e2a'); R(x + 9, y + 3, 1, 1, '#5a3e2a'); R(x, y + 7, 1, 1, '#5a3e2a'); R(x + 9, y + 7, 1, 1, '#5a3e2a'); }
   else if (rng.next() < 0.3) { R(x + 6, y + 3, 1, 1, '#c8d4dc'); R(x + 7, y + 4, 1, 2, '#c8d4dc'); R(x + 8, y + 2, 1, 1, '#c8d4dc'); } // cracked pane
+  if (!boarded) for (const px of [x + 1, x + 6]) for (let i = 0; i < 3; i++) R(px + 1 + i * 0.5, y + 6 - i * 0.5, 0.5, 0.5, 'rgba(200,220,235,0.35)'); // HD: a faint diagonal reflection per pane
+  R(x - 1, y - 1, 12, 0.5, '#e0d8b8'); R(x - 2, y + 9, 14, 0.5, '#ece4cc'); // HD: lit frame top and sill edge
 }
 function door(R, x, y, kind) { // wooden four-panel door, brass handle wrapped in cloth
   R(x - 1, y - 1, 14, 19, '#3a2a1e'); R(x, y, 12, 18, '#6b4a2e'); R(x, y, 12, 1, '#8f6a3e');
-  for (const [dx, dy] of [[1, 2], [7, 2], [1, 10], [7, 10]]) { R(x + dx, y + dy, 4, 6, '#5a3e26'); R(x + dx, y + dy, 4, 1, '#7a5a3a'); }
+  for (const [dx, dy] of [[1, 2], [7, 2], [1, 10], [7, 10]]) { R(x + dx, y + dy, 4, 6, '#5a3e26'); R(x + dx, y + dy, 4, 1, '#7a5a3a'); R(x + dx, y + dy + 5.5, 4, 0.5, '#8f6a3e'); R(x + dx + 3.5, y + dy + 1, 0.5, 5, '#7a5a3a'); } // HD: panel bevels
   R(x + 9, y + 9, 3, 3, '#c8bf9a'); R(x + 9, y + 9, 3, 1, '#e8dfc6'); R(x + 10, y + 12, 1, 2, '#a89a70'); // rag round the handle
   R(x - 2, y + 18, 16, 2, '#8a8578'); R(x - 2, y + 18, 16, 1, '#a8a294'); // step
 }

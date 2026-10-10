@@ -42,8 +42,8 @@ export function drawRoof(ctx, b, x, y, w, h) {
 const courses = (R, x, y, w, h, mat, base, rng, rowOff = 0) => {
   const lo = shade(base, -0.16), lo2 = shade(base, -0.08), hi = shade(base, 0.12);
   R(x, y, w, h, base);
-  if (mat === 'slate') for (let j = 0; j < h; j += 4) { R(x, y + j + 3, w, 1, lo); for (let i = ((j >> 2) + rowOff) % 2 ? 0 : 3; i < w; i += 6) { R(x + i, y + j, 1, 3, lo2); if (rng.next() < 0.06) R(x + i + 1, y + j, 3, 1, hi); else if (rng.next() < 0.05) R(x + i + 1, y + j + 1, 4, 2, lo2); } }
-  else for (let j = 0; j < h; j += 3) { R(x, y + j + 2, w, 1, lo); for (let i = ((j / 3 | 0) + rowOff) % 2 ? 0 : 2; i < w; i += 4) R(x + i + 1, y + j, 2, 1, hi); }
+  if (mat === 'slate') for (let j = 0; j < h; j += 4) { R(x, y + j + 3, w, 1, lo); R(x, y + j, w, 0.5, shade(base, 0.06)); R(x, y + j + 2.5, w, 0.5, shade(base, -0.06)); /* HD: each course lit at its top edge */ for (let i = ((j >> 2) + rowOff) % 2 ? 0 : 3; i < w; i += 6) { R(x + i, y + j, 1, 3, lo2); if (rng.next() < 0.06) R(x + i + 1, y + j, 3, 1, hi); else if (rng.next() < 0.05) R(x + i + 1, y + j + 1, 4, 2, lo2); } }
+  else for (let j = 0; j < h; j += 3) { R(x, y + j + 2, w, 1, lo); for (let i = ((j / 3 | 0) + rowOff) % 2 ? 0 : 2; i < w; i += 4) { R(x + i + 1, y + j, 2, 1, hi); R(x + i + 1.5, y + j, 1, 0.5, shade(base, 0.22)); R(x + i, y + j + 1.5, 0.5, 0.5, lo); } } // HD: a highlight on each tile's curve
 };
 
 // Gable / hipped / nave: per-row spans. The ridge runs east-west at 45% of the depth (the south slope shows more).

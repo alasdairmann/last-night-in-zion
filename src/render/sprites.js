@@ -5,6 +5,7 @@ import { OUTFITS } from '../data.js';
 import { INK, RAMP, SKINS_DEAD, shade } from './palette.js';
 import { ICONS } from './icons.js';
 import { ICONS_HD, hdKit } from './icons_hd.js';
+import { DETAIL } from './detail_hd.js';
 import { drawHuman, drawBloater, drawBig, drawCrawler, drawDog, drawBiscuit, drawCorpse } from './people.js';
 export { shade };
 
@@ -63,9 +64,29 @@ function outlined(src, color = OUTLINE) {
 }
 function tinted(src, color) {
   const c = makeCanvas(src.width, src.height); const x = c.getContext('2d');
-  x.drawImage(src, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = color; x.fillRect(0, 0, c.width, c.height);
+  x.drawImage(src, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = color; x.fillRect(0, 0, c.width, c.height); x.globalCompositeOperation = 'source-over';
+  if (src._hd) c._hd = tinted(src._hd, color);
   return c;
 }
+// HD world sprites: a canvas may carry _hd, a 2x copy the world view draws at the same logical size.
+export const hdOf = (spr) => spr._hd || spr;
+// Renders a lo-res drawer twice: at 1x, and on a 2x-scaled context followed by an optional half-pixel detail pass.
+// The 2x copy gets a 2 HD px outline, so its silhouette matches the 1x sprite exactly.
+function withHD(w, h, draw, detail) {
+  const raw = makeCanvas(w, h), eyes = draw(raw.getContext('2d'));
+  const r2 = makeCanvas(w * 2, h * 2), x2 = r2.getContext('2d');
+  x2.scale(2, 2); draw(x2); x2.setTransform(1, 0, 0, 1, 0, 0);
+  if (detail) detail(hdPen(x2), eyes);
+  return { raw, eyes, r2 };
+}
+// Pen for detail passes, in HD pixels.
+function hdPen(ctx) {
+  const P = (x, y, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); };
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  const at = (x, y) => { const d = ctx.getImageData(x, y, 1, 1).data; return d[3] ? `#${[d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, '0')).join('')}` : null; };
+  return { P, R, at, ctx };
+}
+const finishHD = (c, r2) => { c._hd = outlined(outlined(r2)); return c; };
 
 // ---- tiny 3x5 pixel font for signs, chalk prices and labels baked into the map ----
 const GLYPHS = {
@@ -162,10 +183,14 @@ const CAIN_TORSO = [
   { x: 4, rows: ['JJJjjjjn', 'Jjjjjjjn', 'Jjjnjjjn', 'Jjjnjjjn', 'Jjjjjjjn', 'ZZZZZZZZ', 'UUUUUPPu'] },
   { x: 4, rows: ['jJJjjJJn', 'Jjjjjjjn', 'Jjjnjjjn', 'Jjjnjjjn', 'Jjjnjjjn', 'ZZZZZZZZ', 'UUUUPPUu'] },
 ];
-function drawCain(ctx, pad, view, frame, pose) {
+function cainPal(pad) {
   const pal = { ...CP };
   if (pad >= 2) { const c = CAIN_COSTUME[pad]; pal.J = c[0]; pal.j = c[1]; pal.n = c[2]; }
   if (pad >= 3) { pal.W = '#6a7280'; pal.w = '#4a5260'; } // plate collar
+  return pal;
+}
+function drawCain(ctx, pad, view, frame, pose) {
+  const pal = cainPal(pad);
   const R = (x, y, w, h, c) => { ctx.fillStyle = pal[c] || c; ctx.fillRect(x, y, w, h); };
   const side = view === 2, back = view >= 3, front = view <= 1;
   const step = frame % 2 === 1 ? (frame === 1 ? 1 : -1) : 0;
@@ -249,39 +274,42 @@ export function charSprite(kind, outfit, view, frame, pose, variant = 'n') {
       c = makeCanvas(base.width, base.height); const x = c.getContext('2d'); x.drawImage(base, 0, 0);
       const e = (base.eyes || [])[0];
       if (e) { x.fillStyle = RAMP.blood.fresh; x.fillRect(e[0] + 1, e[1] + 3, 1, 2); x.fillStyle = RAMP.blood.old; x.fillRect(e[0] + 1, e[1] + 5, 1, 1); x.fillStyle = '#e8e0d0'; x.fillRect(e[0] + 2, e[1], 1, 1); }
+      if (e && base._hd) { // the same marks at 2x: a thinner trickle, a single bead of sweat
+        const h = makeCanvas(base._hd.width, base._hd.height), y = h.getContext('2d'); y.drawImage(base._hd, 0, 0);
+        const ex = (e[0] + 1) * 2, ey = (e[1] + 1) * 2;
+        y.fillStyle = RAMP.blood.fresh; y.fillRect(ex + 1, ey + 4, 1, 4); y.fillStyle = RAMP.blood.old; y.fillRect(ex + 1, ey + 8, 1, 2); y.fillStyle = '#e8e0d0'; y.fillRect(ex + 3, ey - 1, 1, 2);
+        c._hd = h;
+      }
     } else {
       c = tinted(base, '#14121c');
       const x = c.getContext('2d'); x.globalCompositeOperation = 'source-over'; x.fillStyle = kind.startsWith('cain') || kind === 'looter' || kind.startsWith('survivor') || kind.startsWith('raider') ? '#c8cfd0' : '#ff4a32';
       for (const [ex, ey] of base.eyes || []) x.fillRect(ex + 1, ey + 1, 1, 1);
+      if (c._hd) { const y = c._hd.getContext('2d'); y.fillStyle = x.fillStyle; for (const [ex, ey] of base.eyes || []) y.fillRect((ex + 1) * 2, (ey + 1) * 2, 2, 2); }
     }
     c.eyes = base.eyes;
     cache.set(key, c); return c;
   }
   const [base, role, flags = ''] = kind.split(':');
-  let raw, eyes;
   const pal = palFor(base, outfit);
-  const done = (shade) => { c = outlined(shade ? shaded(raw) : raw); c.eyes = eyes; cache.set(key, c); return c; };
-  if (base === 'crawler') { raw = makeCanvas(16, 12); eyes = drawCrawler(raw.getContext('2d'), pal, frame, outfit); return done(false); }
-  if (base === 'dog') { const L = outfit === 99; raw = makeCanvas(L ? 20 : 18, L ? 13 : 12); eyes = drawDog(raw.getContext('2d'), frame, pose, L); return done(false); }
-  if (base === 'biscuit') { raw = makeCanvas(14, 10); eyes = drawBiscuit(raw.getContext('2d'), frame, pose); return done(false); }
-  if (pose === 'down' && base.startsWith('cain')) { raw = makeCanvas(16, 12); eyes = drawCainDown(raw.getContext('2d'), frame); return done(false); }
-  if (/^cain\d?$/.test(base)) { raw = makeCanvas(16, 24); eyes = drawCain(raw.getContext('2d'), base.length === 5 ? +base[4] : 0, view, frame, pose); return done(false); }
-  if (base === 'brute' || base === 'butcher') { raw = makeCanvas(22, 28); eyes = drawBig(raw.getContext('2d'), base, view, frame, pose); return done(false); }
-  if (base === 'bloater') { raw = makeCanvas(18, 24); eyes = drawBloater(raw.getContext('2d'), pal, view, frame, pose, outfit, role && role[0] === 'g' ? +role[1] : 1); return done(false); }
-  raw = makeCanvas(16, 24);
+  const make = (w, h, draw, detail) => { const r = withHD(w, h, draw, detail); c = finishHD(outlined(r.raw), r.r2); c.eyes = r.eyes; cache.set(key, c); return c; };
+  if (base === 'crawler') return make(16, 12, (x) => drawCrawler(x, pal, frame, outfit), DETAIL.crawler && ((p, e) => DETAIL.crawler(p, e, { pal, frame, outfit })));
+  if (base === 'dog') { const L = outfit === 99; return make(L ? 20 : 18, L ? 13 : 12, (x) => drawDog(x, frame, pose, L), DETAIL.dog && ((p, e) => DETAIL.dog(p, e, { frame, pose, leader: L }))); }
+  if (base === 'biscuit') return make(14, 10, (x) => drawBiscuit(x, frame, pose), DETAIL.biscuit && ((p, e) => DETAIL.biscuit(p, e, { frame, pose })));
+  if (pose === 'down' && base.startsWith('cain')) return make(16, 12, (x) => drawCainDown(x, frame), DETAIL.cainDown && ((p, e) => DETAIL.cainDown(p, e, { frame })));
+  if (/^cain\d?$/.test(base)) { const pad = base.length === 5 ? +base[4] : 0; return make(16, 24, (x) => drawCain(x, pad, view, frame, pose), (p, e) => DETAIL.cain(p, e, { pad, view, frame, pose, pal: cainPal(pad), tx: CAIN_TORSO[view].x, tw: CAIN_TORSO[view].rows[0].length })); }
+  if (base === 'brute' || base === 'butcher') return make(22, 28, (x) => drawBig(x, base, view, frame, pose), DETAIL.big && ((p, e) => DETAIL.big(p, e, { kind: base, view, frame, pose })));
+  if (base === 'bloater') return make(18, 24, (x) => drawBloater(x, pal, view, frame, pose, outfit, role && role[0] === 'g' ? +role[1] : 1), DETAIL.bloater && ((p, e) => DETAIL.bloater(p, e, { pal, view, frame, pose })));
   const opts = base === 'survivor' ? { role, sick: flags.includes('s'), hurt: flags.includes('h') } : base === 'raider' ? { captain: role === 'captain' } : role && role[0] === 'g' ? { gait: +role[1], look: flags[0] === 'l' ? +flags[1] : 0 } : {};
-  eyes = drawHuman(raw.getContext('2d'), base, pal, view, frame, pose, outfit, opts);
-  return done(false);
+  return make(16, 24, (x) => drawHuman(x, base, pal, view, frame, pose, outfit, opts), DETAIL.human && ((p, e) => DETAIL.human(p, e, { kind: base, pal, view, frame, pose, outfit, opts })));
 }
 
 // Corpse sprites (D2): 16x10 (dog 18x8). mode 'n' | 'char' | 'gas' | 'gore'.
 export function corpseSprite(kind, outfit, mode = 'n', pose = 0) {
   const key = `corpse|${kind}|${outfit}|${mode}|${pose}`;
   let c = cache.get(key); if (c) return c;
-  const raw = makeCanvas(kind === 'dog' ? 18 : 16, kind === 'dog' ? 8 : 10);
   const base = kind === 'crawler' || kind === 'bloater' ? 'walker' : kind;
-  drawCorpse(raw.getContext('2d'), kind, palFor(base, outfit), mode, pose);
-  c = outlined(raw); cache.set(key, c); return c;
+  const r = withHD(kind === 'dog' ? 18 : 16, kind === 'dog' ? 8 : 10, (x) => drawCorpse(x, kind, palFor(base, outfit), mode, pose), DETAIL.corpse && ((p) => DETAIL.corpse(p, null, { kind, mode, pose })));
+  c = finishHD(outlined(r.raw), r.r2); cache.set(key, c); return c;
 }
 
 // ---------------- icons (12x12) ----------------

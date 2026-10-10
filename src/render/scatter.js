@@ -44,6 +44,8 @@ export function tree(ctx, x, y, rng, species) {
   R(lx + 2, y + 2, s / 2, s / 2 - 1, leaf[2]); R(lx + 3, y + 2, 3, 2, leaf[3]);
   if (sp === 'birch') for (let i = 0; i < 5; i++) R(lx + rng.int(1, s - 2), y + rng.int(1, s - 3), 1, 1, leaf[3]);
   else for (let i = 0; i < 4; i++) R(lx + rng.int(2, s - 3), y + rng.int(3, s - 4), 1, 1, i % 2 ? leaf[0] : '#5aa040');
+  // HD: half-pixel leaf clusters, placed by position so the 1x layout (rng) is unchanged
+  for (let i = 0; i < 14; i++) { const k = (x * 31 + y * 17 + i * 53) % 97, a = lx + 1 + (k % (s - 2)), b = y + 1 + ((k * 7) % (s - 3)); R(a + 0.5, b, 0.5, 0.5, i % 3 ? leaf[3] : leaf[2]); R(a, b + 0.5, 0.5, 0.5, leaf[0]); }
 }
 
 // Tiles near anything the player acts on stay clear of scatter.

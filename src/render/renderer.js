@@ -1,10 +1,10 @@
 // World renderer (PRD §23): integer-scaled 480x270 logical canvas, look-ahead camera, y-sorted entities,
 // pixel effects and a half-resolution light map with three hard bands (dark / dim / lit).
 import { T } from '../tuning.js';
-import { buildStatic } from './mapart.js';
+import { buildStatic, MAP_HD } from './mapart.js';
 import { FAR_LIGHTS, HILLTOP } from './beyond.js';
 import { lampKind } from './scatter.js';
-import { charSprite, corpseSprite, viewForDir, icon, iconHD, makeCanvas, shade, pixelText, pixelTextWidth } from './sprites.js';
+import { charSprite, corpseSprite, viewForDir, icon, iconHD, hdOf, makeCanvas, shade, pixelText, pixelTextWidth } from './sprites.js';
 import { RAMP } from './palette.js';
 import { drawProfile, meleeCells, gunCells, chainsawCells } from './weapons.js';
 const cellCache = new Map();
@@ -286,7 +286,7 @@ export class Renderer {
     this.cam.rx = cx - sx; this.cam.ry = cy - sy;
     v.setTransform(HD, 0, 0, HD, 0, 0); v.imageSmoothingEnabled = false;
     v.fillStyle = '#10140e'; v.fillRect(0, 0, VW, VH);
-    v.drawImage(this.staticMap, cx - sx + (this.staticMap.ox || 0), cy - sy + (this.staticMap.oy || 0), VW, VH, 0, 0, VW, VH);
+    { const M = MAP_HD; v.drawImage(this.staticMap, (cx - sx + (this.staticMap.ox || 0)) * M, (cy - sy + (this.staticMap.oy || 0)) * M, VW * M, VH * M, 0, 0, VW, VH); }
     v.save(); v.translate(-cx + sx, -cy + sy);
     const inView = (x, y, m = 40) => x > cx - m && x < cx + VW + m && y > cy - m && y < cy + VH + m;
 
@@ -436,7 +436,7 @@ export class Renderer {
     for (const sl of this.slashes) { const k = 1 - sl.t / sl.life; v.globalAlpha = k; this.pixelLine(v, sl.x - Math.cos(sl.a) * sl.len / 2, sl.y - Math.sin(sl.a) * sl.len / 2, sl.x + Math.cos(sl.a) * sl.len / 2, sl.y + Math.sin(sl.a) * sl.len / 2, sl.c, 1); v.globalAlpha = 1; }
     for (const b of g.burning || []) for (let i = 0; i < 8; i++) this.flame(v, b.x0 + 12 + ((i * 53) % Math.max(1, b.x1 - b.x0 - 24)), b.y0 + 10 + ((i * 29) % 30), 4);
     if (g.event && g.event.kind === 'heli' && g.event.phase !== 'incoming') this.drawHeli(v, g.event);
-    if (g.event && g.event.kind === 'roof') { const e = g.event, bob = Math.floor(this.time * 4) % 2; v.drawImage(charSprite('survivor', 3, 0, 0, bob ? 'attack' : 'walk'), Math.round(e.x) - 8, Math.round(e.y) - 52); this.pixelCircleOutline(v, e.x, e.y, 26, 'rgba(226,181,60,0.6)'); }
+    if (g.event && g.event.kind === 'roof') { const e = g.event, bob = Math.floor(this.time * 4) % 2; { const rs = charSprite('survivor', 3, 0, 0, bob ? 'attack' : 'walk'); v.drawImage(hdOf(rs), Math.round(e.x) - 8, Math.round(e.y) - 52, rs.width, rs.height); } this.pixelCircleOutline(v, e.x, e.y, 26, 'rgba(226,181,60,0.6)'); }
     for (const bc of g.map.beacons) if (g.beaconsLit) this.flame(v, bc.px, bc.py - 6, 5);
     // rain
     if (this.rain.length) { // 1x3 streaks at an angle; the last instant of each drop is a ripple
@@ -488,8 +488,8 @@ export class Renderer {
 
   drawCharacter(v, spr, x, y, flip) {
     const w = spr.width, h = spr.height, ox = Math.round(x), oy = Math.round(y);
-    if (flip) { v.save(); v.translate(ox, 0); v.scale(-1, 1); v.drawImage(spr, -Math.floor(w / 2), oy - h + 1); v.restore(); }
-    else v.drawImage(spr, ox - Math.floor(w / 2), oy - h + 1);
+    if (flip) { v.save(); v.translate(ox, 0); v.scale(-1, 1); v.drawImage(hdOf(spr), -Math.floor(w / 2), oy - h + 1, w, h); v.restore(); }
+    else v.drawImage(hdOf(spr), ox - Math.floor(w / 2), oy - h + 1, w, h);
   }
   shadow(v, x, y, w = 10) { v.fillStyle = 'rgba(0,0,0,0.35)'; v.fillRect(Math.round(x - w / 2), Math.round(y) - 1, w, 2); v.fillRect(Math.round(x - w / 2) + 2, Math.round(y) + 1, w - 4, 1); }
 
@@ -555,7 +555,7 @@ export class Renderer {
     }
   }
   amberOf(spr) {
-    if (!spr._amber) { const c = makeCanvas(spr.width, spr.height); const x = c.getContext('2d'); x.drawImage(spr, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = '#8a6a20'; x.fillRect(0, 0, c.width, c.height); spr._amber = c; }
+    if (!spr._amber) { const c = makeCanvas(spr.width, spr.height); const x = c.getContext('2d'); x.drawImage(spr, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = '#8a6a20'; x.fillRect(0, 0, c.width, c.height); spr._amber = c; if (spr._hd) c._hd = this.amberOf(spr._hd); }
     return spr._amber;
   }
 
@@ -601,7 +601,7 @@ export class Renderer {
     for (let a = 0; a < end; a += 0.08) { const rr = r + ((a * 7) % 2); v.fillStyle = a > end - 0.8 ? '#f2ead6' : col; v.fillRect(Math.round(s.x + Math.cos(a) * rr), Math.round(s.y - 8 + Math.sin(a) * rr * 0.6), 2, 1); }
     v.globalAlpha = 1;
   }
-  tintOf(spr, col) { const k = '_t' + col; if (!spr[k]) { const c = makeCanvas(spr.width, spr.height); const x = c.getContext('2d'); x.drawImage(spr, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height); spr[k] = c; } return spr[k]; }
+  tintOf(spr, col) { const k = '_t' + col; if (!spr[k]) { const c = makeCanvas(spr.width, spr.height); const x = c.getContext('2d'); x.drawImage(spr, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height); spr[k] = c; if (spr._hd) c._hd = this.tintOf(spr._hd, col); } return spr[k]; }
 
   drawWeapon(v, g, x, y) {
     const p = g.p; const w = g.curWeapon();
@@ -780,13 +780,13 @@ export class Renderer {
       const spr = charSprite(kind, c.outfit, 2, 0, 'stagger');
       if (frame === 0) this.drawCharacter(v, spr, x, y + 2, c.flip); // knees buckle
       else { // fall, then impact
-        v.save(); v.translate(x, y); v.rotate((c.flip ? -1 : 1) * (frame === 1 ? Math.PI / 4 : Math.PI / 2)); v.drawImage(spr, -Math.floor(spr.width / 2), -spr.height + (frame === 2 ? 4 : 2)); v.restore();
+        v.save(); v.translate(x, y); v.rotate((c.flip ? -1 : 1) * (frame === 1 ? Math.PI / 4 : Math.PI / 2)); v.drawImage(hdOf(spr), -Math.floor(spr.width / 2), -spr.height + (frame === 2 ? 4 : 2), spr.width, spr.height); v.restore();
         if (frame === 2) { v.fillStyle = 'rgba(168,154,128,0.6)'; v.fillRect(x - 9, y + 1, 3, 1); v.fillRect(x + 7, y + 1, 3, 1); }
       }
     } else {
       const spr = corpseSprite(c.type === 'dog' ? 'dog' : c.type, c.leader ? 99 : c.outfit, c.mode || 'n', c.pose || 0);
-      if (c.flip) { v.save(); v.translate(x, 0); v.scale(-1, 1); v.drawImage(spr, -Math.floor(spr.width / 2), y - spr.height + 3); v.restore(); }
-      else v.drawImage(spr, x - Math.floor(spr.width / 2), y - spr.height + 3);
+      if (c.flip) { v.save(); v.translate(x, 0); v.scale(-1, 1); v.drawImage(hdOf(spr), -Math.floor(spr.width / 2), y - spr.height + 3, spr.width, spr.height); v.restore(); }
+      else v.drawImage(hdOf(spr), x - Math.floor(spr.width / 2), y - spr.height + 3, spr.width, spr.height);
     }
     v.globalAlpha = 1;
   }
@@ -861,7 +861,7 @@ export class Renderer {
   drawBarricade(v, g, b) {
     const x = b.tx * TS, y = b.ty * TS, horiz = b.iy !== 0;
     const R = (a, c, w, h, col) => { v.fillStyle = col; v.fillRect(Math.round(a), Math.round(c), w, h); };
-    if (horiz) R(x + 1, y - 4, 14, 18, '#141619'); else R(x + 2, y - 4, 12, 20, '#141619');
+    this.drawOpening(R, b, x, y, horiz);
     const lost = 6 - b.planks, wear = Math.min(1, lost / 5);
     for (let i = 0; i < b.planks; i++) {
       const k = (b.id * 7 + i * 3), tilt = lost > 0 ? ((k % 3) - 1) * Math.min(2, 1 + (lost >> 1)) : 0;
@@ -889,6 +889,30 @@ export class Renderer {
     if (b.reinforce && b.planks > 0) this.drawReinforce(v, b, x, y, horiz);
     if (b.safe && b.planks <= 0) this.drawRubble(v, x, y, b.id); // C4: walk through it until it's boarded again
     if (g.t - (b.lastTear ?? -99) < 0.15) { R(x + 6, y + 6, 4, 4, '#e8dfc6'); }
+  }
+  // an empty doorway, not a black hole: a timber frame, a threshold, and the room beyond in lamp-less gloom
+  // (floorboards, a skirting, something knocked over). Bare nail-holes and chalk ticks on the jambs mark every
+  // spot that takes boards, and while any plank is missing a slow amber glint on the nails says "board me".
+  drawOpening(R, b, x, y, horiz) {
+    const k = b.id * 31, bx = horiz ? x + 1 : x + 2, by = y - 4, bw = horiz ? 14 : 12, bh = horiz ? 18 : 20;
+    R(bx - 2, by - 2, bw + 4, bh + 3, '#2b1d16'); // frame / lintel
+    R(bx - 1, by - 1, bw + 2, 1, '#5a3e2a'); R(bx - 2, by - 2, bw + 4, 1, '#6b4a2e');
+    R(bx, by, bw, bh, '#1e1814'); // the room, unlit
+    for (let j = 4; j < bh; j += 3) { const d = Math.min(1, j / bh); R(bx, by + j, bw, 1, shade('#4a3424', -0.55 + 0.45 * d)); } // floorboards, lighter toward the door
+    R(bx, by + 3, bw, 1, '#3a2a1e'); // skirting on the far wall
+    R(bx + 1 + (k % 5), by, 3, 3, '#2a2420'); // a picture frame / cupboard in the dark
+    if (k % 3 === 0) { R(bx + bw - 6, by + 8, 4, 2, '#3a2a1e'); R(bx + bw - 6, by + 10, 1, 2, '#2b1d16'); R(bx + bw - 3, by + 7, 1, 3, '#2b1d16'); } // a chair on its side
+    else if (k % 3 === 1) R(bx + 2, by + bh - 6, 5, 3, '#3d342a'); // a dropped box
+    R(bx, by + bh - 2, bw, 2, '#6a5a48'); R(bx, by + bh - 2, bw, 1, '#8a7a62'); // stone threshold, catching the outside light
+    R(bx, by, 1, bh, '#140f0c'); R(bx + bw - 1, by, 1, bh, '#140f0c'); // shadow inside the jambs
+    if (b.planks < 6) {
+      const glow = 0.5 + 0.5 * Math.sin(this.time * 3 + b.id), nail = glow > 0.6 ? '#e2b53c' : '#8a6a32';
+      for (let i = 0; i < 6; i++) if (i >= b.planks) {
+        if (horiz) { const py = y - 3 + i * 3; R(bx - 2, py, 1, 1, nail); R(bx + bw + 1, py, 1, 1, nail); }
+        else { const px = x + 2 + i * 2; R(px, by - 2, 1, 1, nail); R(px, by + bh, 1, 1, nail); }
+      }
+      R(bx - 2, by + 2, 1, 3, '#d8d4c8'); R(bx + bw + 1, by + 2, 1, 3, '#d8d4c8'); // chalk ticks on the jambs
+    }
   }
   // reinforcement is visible; the Red Lion's shutters look heavier than the town's bars and sheets
   drawReinforce(v, b, x, y, horiz) {
@@ -1143,7 +1167,7 @@ export class Renderer {
         const x = b.x - b.ix * back + -b.iy * side, y = b.y - b.iy * back + b.ix * side;
         if (!inV(x, y, 24)) continue;
         const dx = Math.cos(ph) * -b.iy + b.ix, dy = Math.cos(ph) * b.ix + b.iy, spr = charSprite('walker:g0', (b.id + i) % 12, viewForDir(dirIndex(dx, dy)).view, Math.floor(this.time * 3 + i) % 4, 'walk', 's');
-        v.globalAlpha = 0.85; v.drawImage(spr, Math.round(x - cx - spr.width / 2), Math.round(y - cy - spr.height + 2)); v.globalAlpha = 1;
+        v.globalAlpha = 0.85; v.drawImage(hdOf(spr), Math.round(x - cx - spr.width / 2), Math.round(y - cy - spr.height + 2), spr.width, spr.height); v.globalAlpha = 1;
       }
     }
   }
