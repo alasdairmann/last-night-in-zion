@@ -2,7 +2,7 @@
 
 **▶ Play it in your browser: https://alasdairmann.github.io/last-night-in-zion/**
 
-No download or install. It runs in any desktop browser and you play it with the keyboard.
+No download or install. It runs in desktop and mobile browsers. Play with the keyboard, or by touch on a phone or tablet held in landscape (add it to your home screen for fullscreen).
 
 ## Premise
 
@@ -39,7 +39,9 @@ node scripts/runlog-report.js   # summarise the newest run log in logs/ (PRD-v1.
 
 Add `?debug` to the URL for the developer keys: `` ` `` overlay, F2 spawns/zones, F5 god mode, F6 +10,000 Scrap,
 F7 kill all, F8 skip to a round, F9 spawn an enemy, F10 spawn a find, F11 open every door and start the generator,
-F12 download the seed and input log. `?seed=N` fixes the run seed.
+F12 download the seed and input log. `?seed=N` fixes the run seed. `?layout=desktop|tablet|mobile` forces a layout and `?touch=1` forces the touch controls on.
+
+`node scripts/shots.js` screenshots fixed game states with headless Chrome and diffs Desktop against `tests/baseline/` (`--update` retakes them; `--layout mobile` or `--layout tablet` shoots those layouts).
 
 ## Layout
 | Path | What |

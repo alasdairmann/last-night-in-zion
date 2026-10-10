@@ -11,6 +11,7 @@ import { FIND_TYPES } from './data.js';
 import { snapshot, restore } from './sim/save.js';
 import { RunLog } from './runlog.js';
 import { layout } from './layout.js';
+import { TouchInput, mergeInput } from './touch.js';
 
 const runlog = new RunLog();
 
@@ -28,13 +29,28 @@ const input = new Input(S);
 layout.init(S);
 let scale = renderer.resize(layout.mode);
 const rotateEl = document.getElementById('rotate');
-layout.on(() => {
+layout.on(({ changed }) => {
   scale = renderer.resize(layout.mode);
+  if (changed && ui.open) ui.render();
   // portrait on a phone: a rotate screen, and the run pauses underneath
   rotateEl.hidden = !layout.portrait;
   if (layout.portrait && scene === 'play' && deathT < 0) pause();
 });
 rotateEl.hidden = !layout.portrait;
+// touch controls and (in Mobile) the HUD live on an overlay canvas at device pixel ratio
+const overlay = document.getElementById('overlay'), octx = overlay.getContext('2d');
+const touch = new TouchInput(document.getElementById('stage'), overlay, S, layout, {
+  playing: () => scene === 'play' && deathT < 0 && !ui.open && !layout.portrait,
+  game: () => game, pause: () => pause(), cam: () => renderer.cam,
+});
+function drawOverlay(dt) {
+  if (!(layout.touch || layout.mode === 'mobile')) { if (overlay.width) { overlay.width = 0; overlay.height = 0; } return; }
+  const dpr = window.devicePixelRatio || 1, w = Math.round(window.innerWidth * dpr), h = Math.round(window.innerHeight * dpr);
+  if (overlay.width !== w || overlay.height !== h) { overlay.width = w; overlay.height = h; }
+  octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, w, h); octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  touch.update(scene === 'play' ? game : null, dt);
+  if (scene === 'play' && deathT < 0 && game) touch.draw(octx, game);
+}
 // iOS only lets Web Audio start inside a touch handler
 const unlockAudio = () => { audio.init(); if (scene === 'menu' && ui.open && !audio.musicOn) audio.startMusic(); };
 window.addEventListener('touchend', unlockAudio, { passive: true });
@@ -114,7 +130,7 @@ function continueRun(raw = store.loadLatest()) {
 }
 function openLog() { if (scene !== 'play' || deathT >= 0) return; scene = 'pause'; audio.duck(true); audio.setMood('pause'); ui.errandLog(game); }
 function pause() { if (scene !== 'play') return; runlog.note({ e: 'pause' }); runlog.flush(); scene = 'pause'; audio.duck(true); audio.setMood('pause'); ui.noteFocus = 0; ui.pause(); }
-function resume() { if (game) game.setGod(S.godMode); scene = 'play'; audio.duck(false); audio.setMood(null); ui.hide(); last = performance.now(); input.down.clear(); }
+function resume() { if (game) game.setGod(S.godMode); scene = 'play'; audio.duck(false); audio.setMood(null); ui.hide(); last = performance.now(); input.down.clear(); touch.reset(); }
 
 // keys that aren't simulation input
 input.onKey((e) => {
@@ -177,7 +193,7 @@ function frame(now) {
     acc += dt * speed;
     let ticks = 0; const t0 = performance.now();
     while (acc >= T.dt && ticks < 5) {
-      const inp = scene === 'play' && deathT < 0 ? input.sample() : (input.sample(), null);
+      const inp = scene === 'play' && deathT < 0 ? mergeInput(input.sample(), touch.sample(game)) : (input.sample(), touch.sample(null), null);
       if (scene === 'play') { if (inp) inputLog.push(packInput(inp)); game.step(inp || idleInput); }
       else game.step(idleInput);
       pumpEvents();
@@ -205,11 +221,12 @@ function frame(now) {
       const zoom = deathT >= 0 ? 1 + 0.5 * Math.min(1, deathT / 1.5) : 1;
       renderer.draw(game, alpha, { zoom: zoom > 1 ? (deathT > 0.7 ? 1.5 : zoom) : 1, desaturate: deathT >= 0 ? Math.min(1, deathT / 1.5) : 0 });
       hud.fps = hud.fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
-      const showMap = input.held('map') && scene === 'play';
+      const showMap = (input.held('map') || touch.holding('map')) && scene === 'play';
       if (deathT < 0) hud.draw(game, renderer.sctx, scale, renderer.cam, { showMap, debug: DEBUG && debug.overlay ? debug : null });
       if (DEBUG && debug.f2) drawDebugGeometry();
     }
   }
+  drawOverlay(dt);
   if (!frame.once) requestAnimationFrame(frame);
 }
 const idleInput = { up: false, down: false, left: false, right: false, attack: false, shift: false, interact: false, map: false, prev: false, next: false, wheel: 0, slot: 0, reload: false, throw: false, shove: false, trick: false, dog: false };
@@ -253,11 +270,28 @@ ui.mainMenu();
 requestAnimationFrame(frame);
 window.__enoch = {
   get game() { return game; }, runlog, renderer, hud, audio, store, startRun, resume, ui,
+  layout, touchInput: touch,
+  // scripted touch for playtests: synthetic pointers through the real handlers. Controls are in CSS px.
+  touch: {
+    on() { if (!layout.touch) { layout.used = true; layout.update(); } touch.update(game, 0); return touch.ctl.map(({ id, x, y, r, w, h }) => ({ id, x: Math.round(x), y: Math.round(y), r, w, h })); },
+    ev(type, x, y, id = 1) { const el = document.elementFromPoint(x, y) || document.getElementById('stage'); el.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', isPrimary: id === 1, bubbles: true, cancelable: true })); },
+    down(x, y, id = 1) { this.ev('pointerdown', x, y, id); }, move(x, y, id = 1) { this.ev('pointermove', x, y, id); }, up(x, y, id = 1) { this.ev('pointerup', x, y, id); },
+    at(ctl) { this.on(); const b = touch.byId[ctl]; if (!b) throw new Error(`no ${ctl} control showing`); return b; },
+    press(ctl, id = 2) { const b = this.at(ctl); this.down(b.x, b.y, id); }, release(ctl, id = 2) { const q = touch.ptrs.get(id); if (q) this.up(q.x, q.y, id); },
+    tap(ctl, id = 2) { this.press(ctl, id); this.release(ctl, id); },
+    // the stick: angle in degrees (0 = right, 90 = down), or null to let go
+    stick(deg, id = 1) {
+      this.on(); const j = touch.joy;
+      if (deg === null) { if (touch.stick) this.up(touch.stick.x, touch.stick.y, id); return; }
+      if (!touch.stick) this.down(j.x, j.y, id);
+      const a = deg * Math.PI / 180; this.move(touch.stick.ox + Math.cos(a) * j.R, touch.stick.oy + Math.sin(a) * j.R, id);
+    },
+  },
   get scene() { return scene; }, redraw() { frame.once = true; frame(last); frame.once = false; }, pause, openLog, toMenu, gameOver: () => { runTime = 754; gameOver(); },
   // test hook: advance the simulation n ticks with a fixed input, then render one frame
   advance(n, inp = {}) {
-    for (let i = 0; i < n; i++) { game.step({ ...idleInput, ...inp }); pumpEvents(); renderer.update(game, T.dt, true); hud.update(game, T.dt); }
-    renderer.draw(game, 1, {}); hud.draw(game, renderer.sctx, scale, renderer.cam, { showMap: !!inp.map });
+    for (let i = 0; i < n; i++) { touch.update(game, T.dt); game.step(mergeInput({ ...idleInput, ...inp }, touch.sample(game))); pumpEvents(); renderer.update(game, T.dt, true); hud.update(game, T.dt); }
+    renderer.draw(game, 1, {}); hud.draw(game, renderer.sctx, scale, renderer.cam, { showMap: !!inp.map || touch.holding('map') }); drawOverlay(0);
     return { round: game.round, scrap: game.scrap, hp: Math.round(game.p.hp), alive: game.enemies.length, kills: game.stats.kills, dead: game.p.dead, prompt: game.prompt?.label };
   },
 };

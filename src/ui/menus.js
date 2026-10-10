@@ -51,14 +51,23 @@ export class UI {
       html = `<div class="tabs">${tabs.map((t, i) => `<span class="tab${i === s.tab ? ' on' : ''}" data-t="${i}">${esc(t.name)}</span>`).join('')}</div><div class="tabbody">${tabs[s.tab].html}</div>`;
     }
     const side = typeof s.side === 'function' ? s.side() : s.side;
-    this.root.innerHTML = `<div class="plaque ${s.wide ? 'wide' : ''} ${s.tabs ? 'tabbed' : ''}">${s.title ? `<h1>${s.title}</h1>` : ''}${html}${rows && !(small && s.smallTab) ? `<ul class="menu">${rows}</ul>` : ''}${s.foot ? `<div class="foot">${s.foot}</div>` : ''}</div>${side && !small ? `<aside class="tray">${side}</aside>` : ''}`;
+    // touch: a back arrow replaces Esc
+    const back = this.hooks.layout?.touch && (this.stack.length > 1 || (s.onBack && !s.noBack)) ? '<button class="back" aria-label="Back">&#9664;</button>' : '';
+    this.root.innerHTML = `<div class="plaque ${s.wide ? 'wide' : ''} ${s.tabs ? 'tabbed' : ''}">${back}${s.title ? `<h1>${s.title}</h1>` : ''}${html}${rows && !(small && s.smallTab) ? `<ul class="menu">${rows}</ul>` : ''}${s.foot ? `<div class="foot">${s.foot}</div>` : ''}</div>${side && !small ? `<aside class="tray">${side}</aside>` : ''}`;
     this.root.querySelectorAll('[data-st]').forEach((el) => el.addEventListener('click', () => { s.smallTab = +el.dataset.st; this.render(); }));
     this.wireNotes();
     this.root.querySelectorAll('.tab').forEach((el) => el.addEventListener('click', () => { s.tab = +el.dataset.t; this.render(); }));
     if (s.after) s.after(this.root);
+    this.root.querySelector('.plaque > .back')?.addEventListener('click', () => this.back());
     this.root.querySelectorAll('.item').forEach((el) => {
       el.addEventListener('mouseenter', () => { this.sel = +el.dataset.i; this.highlight(); });
-      el.addEventListener('click', () => { this.sel = +el.dataset.i; this.activate(0); });
+      el.addEventListener('click', (e) => {
+        this.sel = +el.dataset.i;
+        // touch: tap a slider where you want it
+        const it = this.items()[this.sel], bar = el.querySelector('.bar');
+        if (it && it.type === 'slider' && bar && this.hooks.layout?.touch) { const r = bar.getBoundingClientRect(); it.set(Math.max(0, Math.min(1, Math.round((e.clientX - r.left) / r.width * 10) / 10))); this.store.save(); this.render(); return; }
+        this.activate(0);
+      });
     });
   }
   highlight() { this.root.querySelectorAll('.item').forEach((el, i) => el.classList.toggle('sel', i === this.sel)); }
@@ -90,12 +99,13 @@ export class UI {
     else if (c === 'ArrowLeft' || c === 'KeyA') this.activate(-1);
     else if (c === 'ArrowRight' || c === 'KeyD') this.activate(1);
     else if (c === 'Enter' || c === 'Space' || c === 'KeyF') this.activate(0);
-    else if (c === 'Escape' || c === 'KeyP' || c === 'Backspace') { if (this.top.onBack) this.top.onBack(); else if (this.stack.length > 1) this.pop(); }
+    else if (c === 'Escape' || c === 'KeyP' || c === 'Backspace') this.back();
     else if (this.top.onKey) this.top.onKey(e);
     else return true;
     e.preventDefault();
     return true;
   }
+  back() { if (this.top.onBack) this.top.onBack(); else if (this.stack.length > 1) this.pop(); }
   activate(dir) {
     const it = this.items()[this.sel]; if (!it) return;
     if (it.type === 'slider') { if (dir) { it.set(Math.max(0, Math.min(1, Math.round((it.get() + dir * 0.1) * 10) / 10))); this.store.save(); this.render(); } return; }
@@ -123,7 +133,7 @@ export class UI {
         { label: 'Credits', action: () => this.credits() },
       ],
       foot: 'W / S to choose &middot; ENTER to select',
-      onBack: () => {},
+      onBack: () => {}, noBack: true,
     });
   }
   howTo() {
@@ -215,7 +225,7 @@ export class UI {
     const items = ids.map((id) => ({ label: `${TRICKS[id].name}  (${T.tricks.charge[id]} kills)`, primary: id === last, action: () => this.hooks.pickedTrick(id) }));
     this.show({ title: 'Choose your Trick', cls: 'tricks', initial: Math.max(0, ids.indexOf(last)),
       html: `<p>An improvised trick on <kbd>X</kbd>, charged by kills. It's yours for the whole run.</p><div class="trickdesc">${ids.map((id) => `<p><b style="color:${TRICKS[id].color}">${TRICKS[id].name}</b>: ${esc(TRICKS[id].desc)}</p>`).join('')}</div>`,
-      items, foot: 'W / S choose &middot; ENTER / F confirm (your last pick is remembered)', onBack: () => {} });
+      items, foot: 'W / S choose &middot; ENTER / F confirm (your last pick is remembered)', onBack: () => {}, noBack: true });
   }
   // v1.4 A2: Notes as a phone notification list. Newest on top; the focused card is open (full text, codes, a map
   // pin button); the rest are one line. Left / Right or the wheel move the focus; M pins it.
