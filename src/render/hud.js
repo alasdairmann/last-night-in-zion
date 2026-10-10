@@ -334,7 +334,7 @@ export class Hud {
   drawBottomLeft(c, g) {
     const C = this.C, p = g.p;
     // comforts row (hover for what each does, §v1.1 feedback)
-    const cap = Math.min(10, g.comfortCap()); let x = 6; const y = VH - 86;
+    const cap = Math.min(g.comfortSlotMax() + 1, g.comfortCap()); let x = 6; const y = VH - 86;
     const held = p.comforts.filter((id) => id !== 'bandages'); // v1.4 F6: Bandages have their own slot
     for (let i = 0; i < Math.max(cap, held.length); i++) {
       const id = held[i];
@@ -529,26 +529,31 @@ export class Hud {
     if (line) out.push(line);
     return out;
   }
+  // a proper arrow (shaft + head), pointing along angle a, tip at (x, y)
+  pointer(c, x, y, a, col, len, alpha) {
+    const cs = Math.cos(a), sn = Math.sin(a), P = (f, s) => [x + cs * f - sn * s, y + sn * f + cs * s];
+    const pts = [P(0, 0), P(-5, -4), P(-5, -1.5), P(-len, -1.5), P(-len, 1.5), P(-5, 1.5), P(-5, 4)];
+    const path = () => { c.beginPath(); c.moveTo(...pts[0]); for (const q of pts.slice(1)) c.lineTo(...q); c.closePath(); };
+    c.globalAlpha *= alpha; c.lineJoin = 'round'; c.lineWidth = 2; c.strokeStyle = '#1d1410'; path(); c.stroke(); c.fillStyle = col; path(); c.fill(); c.globalAlpha /= alpha;
+  }
   drawObjective(c, g, cam) {
     // the only green arrow (§5.7): points at the current errand objective
-    const o = g.objective ? g.objective() : null;
+    const o = g.errandObjective ? g.errandObjective() : null; // errands only: the main quests are for the player to work out
     const t = this.time;
+    const shape = (x, y, a, col, len, alpha) => this.pointer(c, x, y, a, col, len, alpha);
+    const px = g.p.x - cam.rx, py = g.p.y - cam.ry - 6, R = 30;
     const arrow = (wx, wy, col, label) => {
-      const x = wx - cam.rx, y = wy - cam.ry - 10;
-      if (x > 8 && x < VW - 8 && y > 8 && y < VH - 8) {
-        const bob = Math.round(Math.sin(t * 5) * 2);
-        c.fillStyle = '#1d1410'; c.fillRect(x - 4, y - 14 + bob, 9, 7); c.fillRect(x - 2, y - 8 + bob, 5, 3);
-        c.fillStyle = col; c.fillRect(x - 3, y - 13 + bob, 7, 5); c.fillRect(x - 1, y - 8 + bob, 3, 2);
+      const x = wx - cam.rx, y = wy - cam.ry - 10, dx = x - px, dy = y - py, d = Math.hypot(dx, dy);
+      const bob = Math.sin(t * 5) * 1.5;
+      if (d < R + 24 && x > 8 && x < VW - 8 && y > 8 && y < VH - 8) { // close and on screen: a small arrow over the spot
+        shape(x, y - 4 + bob, Math.PI / 2, col, 10, 0.9);
         if (label) this.text(c, label, x, y - 22 + bob, { size: 6, align: 'center', color: col });
         return;
       }
-      const cx = VW / 2, cy = VH / 2, dx = x - cx, dy = y - cy;
-      const k = Math.min((VW / 2 - 16) / Math.abs(dx || 1e-3), (VH / 2 - 16) / Math.abs(dy || 1e-3));
-      const ax = cx + dx * k, ay = cy + dy * k, a = Math.atan2(dy, dx);
-      c.fillStyle = '#1d1410'; c.fillRect(ax - 6, ay - 6, 12, 12);
-      c.fillStyle = col; c.fillRect(ax - 5, ay - 5, 10, 10);
-      c.fillStyle = '#1d1410'; c.fillRect(ax - 1, ay - 3, 2, 6);
-      for (let i = 0; i < 3; i++) { c.fillStyle = col; c.fillRect(Math.round(ax + Math.cos(a) * (9 + i * 2)) - 2 + i, Math.round(ay + Math.sin(a) * (9 + i * 2)) - 2 + i, 4 - i * 2 || 1, 4 - i * 2 || 1); }
+      // otherwise it orbits the player on a ring, pointing the way; faint, so it never fights the HUD
+      const a = Math.atan2(dy, dx), ax = px + Math.cos(a) * (R + bob), ay = py + Math.sin(a) * (R + bob);
+      shape(ax, ay, a, col, 9, 0.75);
+      if (label) this.text(c, label, ax - Math.cos(a) * 14, ay - Math.sin(a) * 14 - 3, { size: 6, align: 'center', color: col });
     };
     if (o) arrow(o.x, o.y, '#6cbf4a');
     // v1.5 P2: every critical card points the way (the Looter's follows him)
@@ -665,16 +670,17 @@ export class Hud {
   }
   drawOffscreen(c, g, cam) {
     const C = this.C;
+    // off-screen threats orbit the player on an outer ring (the errand arrow uses the inner one): icon plus a pointing arrow
+    const px = g.p.x - cam.rx, py = g.p.y - cam.ry - 6, R = 46;
     const arrow = (wx, wy, col, key) => {
       const x = wx - cam.rx, y = wy - cam.ry - 8;
       if (x > 6 && x < VW - 6 && y > 6 && y < VH - 6) return;
-      const cx = VW / 2, cy = VH / 2, dx = x - cx, dy = y - cy;
-      const k = Math.min((VW / 2 - 14) / Math.abs(dx || 1e-3), (VH / 2 - 14) / Math.abs(dy || 1e-3));
-      const ax = cx + dx * k, ay = cy + dy * k, a = Math.atan2(dy, dx);
-      c.fillStyle = '#1d1410'; c.fillRect(ax - 7, ay - 7, 14, 14);
-      c.fillStyle = col; c.fillRect(ax - 6, ay - 6, 12, 12);
-      if (key) this.icon(c, key, ax - 7, ay - 7);
-      c.fillStyle = col; c.fillRect(ax + Math.cos(a) * 9 - 2, ay + Math.sin(a) * 9 - 2, 4, 4);
+      const a = Math.atan2(y - py, x - px), cs = Math.cos(a), sn = Math.sin(a);
+      const ix = Math.round(px + cs * R), iy = Math.round(py + sn * R);
+      c.globalAlpha = 0.85;
+      if (key) this.icon(c, key, ix - 7, iy - 7); else { c.fillStyle = '#1d1410'; c.fillRect(ix - 3, iy - 3, 6, 6); c.fillStyle = col; c.fillRect(ix - 2, iy - 2, 4, 4); }
+      c.globalAlpha = 1;
+      this.pointer(c, ix + cs * 16, iy + sn * 16, a, col, 7, 0.85);
     };
     for (const m of this.marks.values()) arrow(m.x, m.y, m.kind === 'helmet' ? C.red : C.amber, m.kind);
     for (const e of g.enemies) if (e.type === 'brute') arrow(e.x, e.y, C.red, 'helmet');
@@ -695,7 +701,7 @@ export class Hud {
     this.text(c, 'ZION', ox, oy - 13, { size: 8, color: this.C.amber });
     this.text(c, g.power ? `POWER ON  FUEL ${g.fuel}` : g.everPowered ? 'OUT OF FUEL: JERRY CANS AT THE GARAGE' : 'GENERATOR: FIRE STATION', ox + mw, oy - 12, { size: 6, color: this.C.khaki, align: 'right' });
     c.drawImage(this.mapCache, ox, oy);
-    { const o = g.objective(), st = o && g.streetAt(o.x, o.y); paintStreetNames(c, ox, oy, k, 5, st ? st.name : null, (Math.sin(this.time * 5) + 1) / 2); } // v1.4 H1/E3
+    { const o = g.errandObjective(), st = o && g.streetAt(o.x, o.y); paintStreetNames(c, ox, oy, k, 5, st ? st.name : null, (Math.sin(this.time * 5) + 1) / 2); } // v1.4 H1/E3
     const P = (x, y) => [ox + x / 16 * k, oy + y / 16 * k];
     for (const d of g.doors) if (!d.open) { const [x, y] = P(d.x, d.y); this.text(c, String(d.cost), x, y - 3, { font: NUM, weight: '400', size: 5, align: 'center', color: this.C.cream }); }
     // places of interest: icons on the map, and a tooltip for each (feedback)
@@ -722,7 +728,7 @@ export class Hud {
     this.hovers.sort((p1, p2) => p2.w * p2.h - p1.w * p1.h).reverse();
     this.text(c, 'HOVER FOR DETAILS', ox, oy + mh + 3, { size: 5, color: this.C.khaki });
     for (const w of g.worldItems) if (w.kind === 'tape' || w.kind === 'bear') { const [x, y] = P(w.x, w.y); c.fillStyle = '#c8bf9a'; c.fillRect(x - 1, y - 1, 2, 2); }
-    const o = g.objective(); if (o) { const [x, y] = P(o.x, o.y); c.fillStyle = Math.floor(this.time * 4) % 2 ? '#6cbf4a' : '#2e5a1e'; c.fillRect(x - 3, y - 3, 6, 6); }
+    const o = g.errandObjective(); if (o) { const [x, y] = P(o.x, o.y); c.fillStyle = Math.floor(this.time * 4) % 2 ? '#6cbf4a' : '#2e5a1e'; c.fillRect(x - 3, y - 3, 6, 6); }
     if (this.pin) { const [x, y] = P(this.pin.x, this.pin.y); c.fillStyle = '#1d1410'; c.fillRect(x - 3, y - 9, 7, 7); c.fillStyle = Math.floor(this.time * 4) % 2 ? this.C.gold : '#fff2b0'; c.fillRect(x - 2, y - 8, 5, 5); c.fillRect(x, y - 3, 1, 3); this.text(c, this.pin.title || 'PIN', x, y - 17, { size: 5, align: 'center', color: this.C.gold }); }
     for (const tr of g.triggers) { const sp = g.spot(tr.at); const [x, y] = P(sp.px, sp.py); this.text(c, '?', x, y - 4, { size: 8, align: 'center', color: this.C.amber }); }
     if (g.biscuit && !g.biscuit.dead) { const [x, y] = P(g.biscuit.x, g.biscuit.y); c.fillStyle = '#c49a62'; c.fillRect(x - 1, y - 1, 3, 3); }

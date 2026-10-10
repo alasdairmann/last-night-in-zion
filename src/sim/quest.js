@@ -41,7 +41,7 @@ export const QuestMixin = {
     B.found[n] = true; B.n++; B.step = Math.max(B.step, B.n);
     this.emit('squeak', {}); this.emit('questStep', { quest: 'bears', step: B.step });
     const pin = this.bearObjective();
-    if (B.n === 1) this.card({ key: 'bears', prio: 'objective', text: 'QUEST: ELLIE\'S BEARS', sub: 'A name tag: "Ellie Marsh, Class 2". Two more of her bears are out there. Follow the yellow arrow', pin });
+    if (B.n === 1) this.card({ key: 'bears', prio: 'objective', text: 'QUEST: ELLIE\'S BEARS', sub: 'A name tag: "Ellie Marsh, Class 2". Two more of her bears are out there somewhere', pin });
     else if (B.n === 2) this.card({ key: 'bears', prio: 'objective', update: true, text: 'ELLIE\'S BEARS (2/3)', sub: 'Another tag, another note in Ellie\'s hand: "keep going". One more', pin });
     else { B.allRound = this.round; this.card({ key: 'bears', prio: 'objective', update: true, text: 'ALL THREE OF ELLIE\'S BEARS', sub: 'Each tag says the same: "my peg, Zion Primary". Take them there next wave' }); }
   },

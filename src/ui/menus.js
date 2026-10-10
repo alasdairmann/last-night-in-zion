@@ -4,6 +4,7 @@ import { ZONE_NAMES, TRICKS, TAPES, WEATHER, ITEMS, ITEM_USES, THROWS, GUNS, CON
 import { weaponName } from '../sim/game.js';
 import { pediaTabs, mapHtml, wirePedia } from './enochpedia.js';
 import { T } from '../tuning.js';
+import { mountTitleArt } from './titleart.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -111,8 +112,8 @@ export class UI {
     const best = this.store.best;
     let save = null; try { const raw = this.store.loadLatest(); if (raw) save = { meta: JSON.parse(raw).meta || { round: '?' } }; } catch { save = null; }
     this.show({
-      cls: 'title', title: '<span class="t1">LAST NIGHT</span> <span class="t2">IN ZION</span>',
-      html: `<p class="pitch">Hold a dying town through wave after wave with a nail bat, a generator, and whatever Scrap you can pull off the dead.</p>${best ? `<p class="best">Personal best: wave <b>${best}</b>${this.store.rec.escapes ? ` &middot; Escapes: <b>${this.store.rec.escapes}</b> (earliest wave ${this.store.rec.bestEscapeRound})` : ''}${this.store.rec.signalComplete ? ' &middot; <b title="The Signal answered">&#128251;</b>' : ''}${this.store.rec.bestScore ? ` &middot; Best score: <b>${this.store.rec.bestScore.toLocaleString('en-GB')}</b>` : ''}</p>` : ''}`,
+      cls: 'title', after: (r) => mountTitleArt(r.querySelector('.tbanner')),
+      html: `<h1 class="sr">Last Night in Zion</h1><canvas class="tbanner"></canvas>${best ? `<p class="best">Personal best: wave <b>${best}</b>${this.store.rec.escapes ? ` &middot; Escapes: <b>${this.store.rec.escapes}</b> (earliest wave ${this.store.rec.bestEscapeRound})` : ''}${this.store.rec.signalComplete ? ' &middot; <b title="The Signal answered">&#128251;</b>' : ''}${this.store.rec.bestScore ? ` &middot; Best score: <b>${this.store.rec.bestScore.toLocaleString('en-GB')}</b>` : ''}</p>` : ''}`,
       items: [
         ...(save ? [{ label: `Continue (wave ${save.meta.round})`, primary: true, action: () => this.hooks.cont() }] : []),
         { label: save ? 'New run' : 'Play', primary: !save, action: () => this.hooks.play() },

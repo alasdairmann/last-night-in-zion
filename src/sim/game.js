@@ -154,7 +154,7 @@ export class Game {
   onHeavySoft(x, y) { return this.map.heavySoft.has(Math.floor(y / TS) * MW + Math.floor(x / TS)); }
   hasComfort(id) { return this.p.comforts.includes(id); }
   ripe(id) { return this.hasComfort(id) && (this.p.comfortRounds[id] || 0) >= T.comforts.ripenRounds; }
-  comfortCap() { return Math.min(this.comfortSlotMax(), (this.signal && this.signal.done ? 9 : this.firstBruteKilled ? T.comforts.capRaised : T.comforts.cap) + (this.capBonus || 0) + (this.hasComfort && this.hasComfort('mule') ? T.mule.comfortSlots : 0)); }
+  comfortCap() { if (this.infinite) return this.comfortSlotMax() + 1; return Math.min(this.comfortSlotMax(), (this.signal && this.signal.done ? T.comforts.capRaised + 1 : this.firstBruteKilled ? T.comforts.capRaised : T.comforts.cap) + (this.capBonus || 0) + (this.hasComfort && this.hasComfort('mule') ? T.mule.comfortSlots : 0)); }
   // v1.5 C1: never more slots than there are slot-taking comforts to fill them, less one, so slots stay scarce
   comfortSlotMax() { return Object.values(COMFORTS).filter((c) => !c.noPower).length - 1; }
   fuelRounds() { return this.hasRole && this.hasRole('mechanic') ? 10 : T.generator.fuelRounds; }
@@ -419,8 +419,7 @@ export class Game {
           if (p.charge < P.chargeTime && room > 0) { const dt = Math.min(DT, room / P.drain); p.charge = Math.min(P.chargeTime, p.charge + dt); p.stam -= P.drain * dt; }
           if (p.charge >= P.chargeTime - 1e-9 || p.stam <= P.reserve + 1e-9) { p.chargeReady = true; this.emit('chargeReady', { x: p.x, y: p.y }); }
         } else {
-          p.stam = Math.max(0, p.stam - P.holdDrain * DT);
-          if (p.stam <= 0) { this.powerAttack(w); p.needRelease = true; } // the only auto-release; the next charge needs a fresh press
+          p.stam = Math.max(0, p.stam - P.holdDrain * DT); // held until the player lets go, even on empty stamina
         }
         return;
       }
@@ -818,6 +817,8 @@ export class Game {
     const p = this.p; if (p.dead) return;
     if (!p.downed) p.hp = p.maxHp;
     this.parts = T.parts.max; // unlimited Parts too: every cost is payable, theft takes nothing that sticks
+    p.stam = 1; this.bandagesStock = Math.max(this.bandagesStock, this.bandageCap()); if (this.hasComfort('bandages')) p.bandages = this.bandageCap();
+    this.ammoCrateUsed = false; this.keepsake && (this.keepsake.boughtRound = -1);
     if (p.throwable.id) p.throwable.count = Math.max(p.throwable.count, THROWS[p.throwable.id].max);
     if (this.trick.id) this.trick.charge = this.trickNeed();
     for (const w of [...p.slots, p.lastChance]) {
@@ -1003,21 +1004,21 @@ export class Game {
       case 'comfort': {
         const def = COMFORTS[o.id];
         if (this.hasComfort(o.id)) return R(`Pour away ${def.name}`, 0, 1.2, () => this.dropComfort(o.id), { sub: 'Frees a comfort slot. No refund' });
-        if (o.id === 'bandages' && this.bandagesStock <= 0) return D('Bandages: Out of stock');
-        if (!def.noPower && !this.power) return D(`${def.name}: needs power`);
-        if (this.comfortLocks[o.id] > 0) return D(`${def.name}: looted`);
+        if (o.id === 'bandages' && this.bandagesStock <= 0 && !this.infinite) return D('Bandages: Out of stock');
+        if (!def.noPower && !this.power && !this.infinite) return D(`${def.name}: needs power`);
+        if (this.comfortLocks[o.id] > 0 && !this.infinite) return D(`${def.name}: looted`);
         if (o.id !== 'bandages' && this.comfortCount() >= this.comfortCap()) return D('Comfort limit reached');
         const cost = o.id === 'stew' && this.hasRole('cook') ? Math.round(def.cost * 0.7 / 10) * 10 : def.cost;
         return R(def.name, cost, T.hold.comfort, () => this.buyComfort(o.id), { sub: def.desc });
       }
       case 'secondWind': {
         if (p.secondWind) return D('Second Wind (yours)');
-        if (this.secondWindBuys >= T.prices.secondWind.length) return D('Second Wind: sold out');
-        return R('Second Wind', T.prices.secondWind[this.secondWindBuys], T.hold.comfort, () => { p.secondWind = true; this.secondWindBuys++; p.busyT = T.comforts.drinkTime; this.emit('comfort', { id: 'secondWind' }); }, { sub: 'Get back up once. Not a comfort: uses no slot' });
+        if (this.secondWindBuys >= T.prices.secondWind.length && !this.infinite) return D('Second Wind: sold out');
+        return R('Second Wind', T.prices.secondWind[Math.min(this.secondWindBuys, T.prices.secondWind.length - 1)], T.hold.comfort, () => { p.secondWind = true; this.secondWindBuys++; p.busyT = T.comforts.drinkTime; this.emit('comfort', { id: 'secondWind' }); }, { sub: 'Get back up once. Not a comfort: uses no slot' });
       }
       case 'workshop': return this.describeWorkshop();
       case 'ammoCrate': {
-        if (this.ammoCrateUsed) return D('Ammo crate: used this round');
+        if (this.ammoCrateUsed && !this.infinite) return D('Ammo crate: used this round');
         if (![1, 2, 3].some((i) => p.slots[i])) return D('Ammo crate: no guns');
         return R('Ammo crate (+50% reserves)', T.prices.ammoCrate, T.hold.buy, () => {
           this.ammoCrateUsed = true;
@@ -1035,7 +1036,7 @@ export class Game {
       }
       case 'trap': {
         if (this.carriedItem() === 'drum' && this.errandActive('wire')) return D(`${o.name}: wiring in progress`); // v1.4 E8
-        if (!this.power && !(o.kind === 'searchlight' && this.searchlightFixed)) return D(`${o.name}: needs power`);
+        if (!this.power && !this.infinite && !(o.kind === 'searchlight' && this.searchlightFixed)) return D(`${o.name}: needs power`);
         if (o.activeT > 0) return D(`${o.name}: active`);
         // v1.2 B22: killing traps arm (free) and fire themselves when a crowd is in them; you pay each time one fires
         if (this.armable(o)) {
@@ -1053,13 +1054,13 @@ export class Game {
     const D = (label) => ({ label, cost: 0, disabled: true });
     if (item.startsWith('t:')) {
       const id = item.slice(2), def = THROWS[id];
-      if (def.power && !this.power) return D(`${def.name}: needs power`);
+      if (def.power && !this.power && !this.infinite) return D(`${def.name}: needs power`);
       if (p.throwable.id === id && p.throwable.count >= def.max) return D(`${def.name} (full)`);
       return { label: `${def.name} x${def.max}`, cost: def.cost, holdTime: T.hold.buy, action: () => { p.throwable = { id, count: def.max }; this.emit('equip', { id }); }, sub: this.replaceText(item) };
     }
     if (MELEE[item]) {
       const def = MELEE[item];
-      if (def.power && !this.power) return D(`${def.name}: needs power`);
+      if (def.power && !this.power && !this.infinite) return D(`${def.name}: needs power`);
       const cur = p.slots[0];
       if (cur && cur.id === item) {
         if (cur.dur >= this.maxDur(cur)) return D(`${weaponName(cur)} (yours)`);
@@ -1294,7 +1295,7 @@ export class Game {
       const sub = ws.options ? `Q/E choose: ${ws.options.map((o, i) => (i === ws.choice ? `[${EFFECTS[o].name}]` : EFFECTS[o].name)).join(' / ')}` : 'Tier ' + (ws.w.tier + 1);
       return { label: `Take ${nm}`, cost: 0, holdTime: T.hold.take, action: () => this.takeWorkshop(), sub };
     }
-    if (!this.power) return D('Workshop: needs power');
+    if (!this.power && !this.infinite) return D('Workshop: needs power');
     const w = this.curWeapon();
     if (!w || p.lastChance) return D('Workshop: hold a weapon');
     if (w.tier >= T.workshop.maxTier) return D(`${weaponName(w)}: fully upgraded`);
@@ -1470,7 +1471,7 @@ export class Game {
     this.round = r; this.state = 'active'; this.roundKills = 0; this.roundFinds = 0; this.killsSinceFind = 0; this.plankScrap = 0;
     this.ammoCrateUsed = false; this.spawnT = 1.0;
     if (this.bank > 0) { const i = Math.floor(this.bank * T.bank.interest / 10) * 10; this.bank += i; }
-    if ((this.power || this.fuseBlown) && r > 1 && this.fuel > 0) {
+    if ((this.power || this.fuseBlown) && r > 1 && this.fuel > 0 && !this.infinite) {
       this.fuel--;
       if (this.fuel <= 0) { this.power = false; this.emit('powerOut', {}); this.emit('banner', { text: 'THE GENERATOR HAS RUN DRY', sub: 'Jerry cans at the garage', danger: true }); }
       else if (this.fuel <= 2) this.emit('banner', { text: `FUEL LOW: ${this.fuel} WAVE${this.fuel > 1 ? 'S' : ''} LEFT`, sub: 'Jerry cans at the garage', danger: true });

@@ -160,8 +160,8 @@ export const GearMixin = {
     if (!this.safeHouse && !this.openZones.has(5)) return;
     const s = this.map.spots.jukebox;
     out.push({ id: 'jukebox', x: s.px, y: s.py - 10, describe: () => {
-      if (!this.power) return { label: 'Jukebox: needs power', cost: 0, disabled: true };
-      if (this.keepsake.boughtRound === this.round) return { label: 'Jukebox: one keepsake a wave', cost: 0, disabled: true };
+      if (!this.power && !this.infinite) return { label: 'Jukebox: needs power', cost: 0, disabled: true };
+      if (this.keepsake.boughtRound === this.round && !this.infinite) return { label: 'Jukebox: one keepsake a wave', cost: 0, disabled: true };
       return { label: 'Jukebox: a keepsake', cost: this.keepsakePrice(), holdTime: T.hold.comfort, action: () => this.buyKeepsake(), sub: 'Plays a song; something drops out of the change slot' };
     } });
   },

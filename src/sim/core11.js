@@ -225,7 +225,7 @@ export const CoreMixin = {
     }
     // Trick upgrade (§12.3)
     if (b.tricks && this.trick.id && !this.trick.up) {
-      if (!this.power) opts.push(D(`Upgrade ${TRICKS[this.trick.id].name}: needs power`));
+      if (!this.power && !this.infinite) opts.push(D(`Upgrade ${TRICKS[this.trick.id].name}: needs power`));
       else opts.push({ label: `Upgrade ${TRICKS[this.trick.id].name}`, cost: T.tricks.upgradeCost, holdTime: 1, action: () => { this.trick.up = true; this.emit('banner', { text: `${TRICKS[this.trick.id].name.toUpperCase()} UPGRADED`, sub: TRICKS[this.trick.id].up }); }, sub: TRICKS[this.trick.id].up });
     }
     if (b.weapons) this.questBenchOptions(opts);
