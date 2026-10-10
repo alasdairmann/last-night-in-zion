@@ -91,7 +91,7 @@ export function buildStatic(map) {
   { const f = map.spots.bench_fire; R(f.px - 7, f.py - 28, 14, 14, '#6f787d'); R(f.px - 7, f.py - 28, 14, 2, '#9aa3a8'); R(f.px - 1, f.py - 26, 1, 12, '#3a3a3e'); for (const dx of [-4, 3]) { R(f.px + dx, f.py - 24, 2, 1, '#3a3a3e'); R(f.px + dx, f.py - 22, 2, 1, '#3a3a3e'); } R(f.px - 6, f.py - 18, 3, 3, '#e2c060'); pixelText(ctx, 'LOCKERS', f.px - 13, f.py - 34, '#c8bf9a'); }
   { const f = map.spots.bench_garage; workbench(R, f.px - 8, f.py - 22, 16); }
   { const f = map.spots.sluice; R(f.px + 2, f.py - 14, 6, 22, '#4a4d52'); R(f.px + 2, f.py - 14, 1, 22, '#6f787d'); R(f.px, f.py - 8, 10, 3, '#6f787d'); R(f.px + 3, f.py - 16, 4, 2, '#b5503b'); R(f.px + 4, f.py - 4, 2, 2, '#8a5a32'); }
-  { const f = map.spots.school_mast; mast(R, f.px, f.py); ladder(R, f.px, f.py); paintedArrow(R, f.px, f.py + 10); } // v1.4 B3: the way up, from the walk-on side
+  { const f = map.spots.school_mast; mast(R, f.px - 30, f.py - 14); ladder(R, f.px, f.py); paintedArrow(R, f.px, f.py + 10); } // v1.4 B3: the way up, from the walk-on side; v1.6: the mast stands on the roof, not in the lane
   for (const n of ['church_ladder', 'fire_ladder']) ladder(R, map.spots[n].px, map.spots[n].py); // v1.4 B3: light rails so you can see them
   for (const b of map.beacons) { R(b.px - 5, b.py - 2, 10, 6, '#3a3a3e'); R(b.px - 5, b.py - 2, 10, 1, '#5a5a5e'); R(b.px - 4, b.py - 4, 8, 3, '#5a3e2a'); R(b.px - 3, b.py - 5, 2, 2, '#8f6a3e'); R(b.px + 1, b.py - 5, 2, 1, '#6b4a2e'); }
   { const f = map.spots.bbq; R(f.px - 6, f.py - 8, 12, 6, '#2f2f33'); R(f.px - 6, f.py - 8, 12, 1, '#4a4d52'); for (let i = 0; i < 5; i++) R(f.px - 5 + i * 2, f.py - 7, 1, 1, '#6f787d'); R(f.px - 5, f.py - 2, 1, 8, '#2f2f33'); R(f.px + 4, f.py - 2, 1, 8, '#2f2f33'); R(f.px + 7, f.py - 6, 4, 9, '#4d7fb8'); R(f.px + 7, f.py - 6, 1, 9, '#6a9ad0'); R(f.px + 8, f.py - 8, 2, 2, '#3a3a3e'); }
@@ -337,11 +337,13 @@ function mast(R, x, y) { // lattice radio mast on the school roof, guy wires; th
   for (let i = 0; i < 14; i++) { R(x - 12 + i, y - 40 + Math.round(i * 2.6), 1, 1, '#4a4d52'); R(x + 21 - i, y - 40 + Math.round(i * 2.6), 1, 1, '#4a4d52'); } // guy wires
   R(x, y - 62, 10, 2, '#9aa3a8'); R(x + 4, y - 66, 2, 4, '#9aa3a8');
 }
-function ladder(R, x, y) {
-  R(x - 6, y - 36, 12, 28, 'rgba(20,16,12,0.45)'); // a shadow so it reads against any wall
-  R(x - 5, y - 36, 2, 30, '#c8cfd0'); R(x + 3, y - 36, 2, 30, '#c8cfd0'); R(x - 5, y - 36, 1, 30, '#e8e4d8'); R(x + 3, y - 36, 1, 30, '#e8e4d8');
-  for (let i = 0; i < 7; i++) { R(x - 3, y - 10 - i * 4, 6, 1, '#e8e4d8'); R(x - 3, y - 9 - i * 4, 6, 1, '#6f787d'); }
-  R(x - 6, y - 7, 4, 2, '#4a4d52'); R(x + 2, y - 7, 4, 2, '#4a4d52'); // feet
+function ladder(R, x, y) { // leans against the east wall of the building one tile to the west, hooked over its eave
+  const wall = Math.floor(x / TS) * TS, H = 34, at = (j) => Math.round(x - 4 + (wall - 3 - (x - 4)) * (j / H)); // rail x at height j
+  for (let j = 0; j < H; j++) R(at(j) + 2, y - 6 - j, 8, 1, 'rgba(20,16,12,0.35)'); // its shadow on the wall
+  for (let j = 0; j < H; j++) { const lx = at(j); R(lx, y - 6 - j, 2, 1, '#c8cfd0'); R(lx + 7, y - 6 - j, 2, 1, '#c8cfd0'); R(lx, y - 6 - j, 1, 1, '#e8e4d8'); R(lx + 7, y - 6 - j, 1, 1, '#e8e4d8'); }
+  for (let j = 4; j < H; j += 4) { const lx = at(j); R(lx + 2, y - 6 - j, 5, 1, '#e8e4d8'); R(lx + 2, y - 5 - j, 5, 1, '#6f787d'); }
+  const tx = at(H); R(tx - 1, y - 6 - H - 2, 3, 2, '#6f787d'); R(tx + 6, y - 6 - H - 2, 3, 2, '#6f787d'); // hooks over the eave
+  R(x - 5, y - 6, 4, 2, '#4a4d52'); R(x + 2, y - 6, 4, 2, '#4a4d52'); // feet on the ground
 }
 function paintedArrow(R, x, y) { // a stencilled yellow arrow on the ground: up here
   for (let i = 0; i < 4; i++) R(x - i, y - 4 + i, 1 + i * 2, 1, '#d9c23a');
@@ -506,8 +508,8 @@ function decor(ctx, d, rng) {
     case 'flowers': for (let i = 0; i < 6; i++) { R(x - 8 + i * 3, y - 2 + (i % 2), 2, 2, ['#e2b53c', '#d84a3a', '#e8dfc6'][i % 3]); R(x - 8 + i * 3, y + (i % 2), 1, 2, '#46963a'); } break;
     case 'bench': R(x - 10, y - 4, 20, 3, '#8f6a3e'); R(x - 10, y - 4, 20, 1, '#c49a62'); R(x - 10, y - 7, 20, 2, '#c49a62'); R(x - 10, y - 7, 20, 1, '#d8b07a'); R(x - 9, y - 1, 2, 4, '#3a3a3e'); R(x + 7, y - 1, 2, 4, '#3a3a3e'); R(x - 2, y - 6, 4, 1, '#c9a24a'); break;
     case 'bunting': {
-      const cols = ['#b5503b', '#e2b53c', '#4d7fb8', '#5d8a4a'];
-      for (let i = 0; i < 26; i++) { const bx = 43 * TS + i * 7, by = 28 * TS + 2 + Math.round(Math.sin(i / 26 * Math.PI) * 6); R(bx, by, 7, 1, '#2b1d16'); R(bx + 2, by + 1, 3, 2, cols[i % 4]); R(bx + 3, by + 3, 1, 1, cols[i % 4]); R(bx + 2, by + 1, 1, 1, shade(cols[i % 4], 0.3)); }
+      const cols = ['#b5503b', '#e2b53c', '#4d7fb8', '#5d8a4a']; // v1.6: strung across the street, Hardware gutter to Bakery gutter
+      for (let i = 0; i < 16; i++) { const bx = 45 * TS + i * 7, by = 27 * TS - 4 + Math.round(Math.sin(i / 16 * Math.PI) * 6); R(bx, by, 7, 1, '#2b1d16'); R(bx + 2, by + 1, 3, 2, cols[i % 4]); R(bx + 3, by + 3, 1, 1, cols[i % 4]); R(bx + 2, by + 1, 1, 1, shade(cols[i % 4], 0.3)); }
       break;
     }
   }

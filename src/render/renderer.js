@@ -759,7 +759,7 @@ export class Renderer {
   }
   drawMastLights(v, g) { // radio mast: a red aircraft light; the booster box with a blinking green LED once built
     const f = g.map.spots.school_mast; if (!f) return;
-    if (Math.floor(this.time * 1.5) % 2) { v.fillStyle = '#ff3a2a'; v.fillRect(f.px + 4, f.py - 68, 2, 2); }
+    if (Math.floor(this.time * 1.5) % 2) { v.fillStyle = '#ff3a2a'; v.fillRect(f.px - 26, f.py - 82, 2, 2); }
     if (g.mastRepaired) { v.fillStyle = '#2b1d16'; v.fillRect(f.px + 9, f.py - 9, 8, 7); v.fillStyle = '#4a4d52'; v.fillRect(f.px + 10, f.py - 8, 6, 5); v.fillStyle = '#6f787d'; v.fillRect(f.px + 10, f.py - 8, 6, 1); if (Math.floor(this.time * 3) % 2) { v.fillStyle = '#6cbf4a'; v.fillRect(f.px + 14, f.py - 6, 1, 1); } }
   }
   // D2 death: 4 frames (knees buckle, fall, impact, settle), then the corpse over a pool that grows (3 sizes in 1 s),

@@ -139,7 +139,7 @@ const PUB_INTERIOR = [5, 46, 13, 49];
 const PUB_DOOR = [9, 50];
 const SAFE_BARS = [[4, 47, 1, 0], [7, 45, 0, 1], [10, 45, 0, 1], [14, 47, -1, 0]];
 // Rooftop beacons (§6.6), drawn on the roofs; lit from the ladder spot
-const BEACONS = [{ id: 'church', x: 13.5, y: 2.5, spot: 'church_ladder', zone: 6 }, { id: 'fire', x: 9, y: 22, spot: 'fire_ladder', zone: 3 }, { id: 'school', x: 44, y: 3, spot: 'school_mast', zone: 7 }];
+const BEACONS = [{ id: 'church', x: 13.5, y: 2.5, spot: 'church_ladder', zone: 6 }, { id: 'fire', x: 9, y: 23, spot: 'fire_ladder', zone: 3 }, { id: 'school', x: 44, y: 3, spot: 'school_mast', zone: 7 }];
 const BRAZIERS = [{ x: 45, y: 36 }, { x: 22, y: 33 }, { x: 12, y: 17 }, { x: 47, y: 15 }, { x: 88, y: 54 }, { x: 5, y: 57 }];
 const BARRELS = [{ x: 34, y: 30 }, { x: 24, y: 38 }, { x: 70, y: 40 }, { x: 91, y: 13 }, { x: 60, y: 58 }, { x: 9, y: 58 }];
 const LAMPS = [
