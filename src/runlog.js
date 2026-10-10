@@ -10,7 +10,7 @@ const SNAP_EVERY = 5;   // seconds of game time
 const FLUSH_EVERY = 4;  // seconds of real time
 
 export class RunLog {
-  constructor() { this.buf = []; this.run = null; this.enabled = location.protocol.startsWith('http') && /^(localhost|127\.0\.0\.1)$/.test(location.hostname); // only when served by server.js locally this.lastFlush = performance.now(); }
+  constructor() { this.buf = []; this.run = null; this.enabled = location.protocol.startsWith('http') && /^(localhost|127\.0\.0\.1)$/.test(location.hostname); this.lastFlush = performance.now(); } // logs only when served by server.js locally
   start(game, meta = {}) {
     this.flush();
     const d = new Date();
