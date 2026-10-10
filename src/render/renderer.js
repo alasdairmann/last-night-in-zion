@@ -716,9 +716,13 @@ export class Renderer {
     for (let i = 0; i < 3; i++) { R(4 + i * 12, 11, 10, 9, '#9a2a20'); R(4 + i * 12, 11, 10, 1, '#e8e4d8'); R(5 + i * 12, 14, 8, 1, '#c8cfd0'); R(12 + i * 12, 16, 1, 2, '#e8e4d8'); } // chrome lockers
     R(38, 11, 6, 6, '#c8b060'); R(39, 12, 4, 4, '#a8903a'); R(40, 13, 2, 2, '#c8b060'); // rolled hose
     R(5, 13, 36, 1, '#e2b53c');
-    // wheels: the rear one on blocks until the tyre is fitted
-    R(6, 26, 10, 7, '#1d1d22'); R(9, 28, 4, 3, '#6f787d');
-    if (fit.tyre || E.tyre || going) { R(46, 26, 10, 7, '#1d1d22'); R(49, 28, 4, 3, '#6f787d'); R(50, 29, 2, 1, '#c8cfd0'); }
+    for (let i = 0; i < 31; i++) R(1 + i * 2, 24, 2, 2, i % 2 ? '#e2b53c' : '#7a1a16'); // chequered stripe along the side
+    R(45, 18, 1, 6, '#7a1a16'); R(52, 19, 2, 1, '#e8e4d8'); // cab door and handle
+    R(62, 9, 2, 3, '#2b1d16'); R(60, 26, 4, 3, '#c0c4c8'); R(60, 26, 4, 1, '#e8e4d8'); R(62, 20, 2, 2, '#f2ead6'); // mirror, bumper, headlight
+    // wheels under dark arches: the rear one on blocks until the tyre is fitted
+    R(4, 24, 14, 3, '#1d1d22'); R(44, 24, 14, 3, '#1d1d22');
+    R(5, 25, 12, 9, '#1d1d22'); R(8, 27, 6, 5, '#4a4d52'); R(9, 28, 4, 3, '#8c8f86'); R(10, 29, 2, 1, '#c8cfd0');
+    if (fit.tyre || E.tyre || going) { R(45, 25, 12, 9, '#1d1d22'); R(48, 27, 6, 5, '#4a4d52'); R(49, 28, 4, 3, '#8c8f86'); R(50, 29, 2, 1, '#c8cfd0'); }
     else { R(46, 28, 4, 5, '#8f6a3e'); R(52, 28, 4, 5, '#8f6a3e'); R(46, 28, 4, 1, '#c49a62'); R(52, 28, 4, 1, '#c49a62'); R(47, 25, 8, 3, '#3a3a3e'); }
     if (!(fit.battery || going)) { R(28, 20, 8, 6, '#141619'); R(29, 21, 2, 1, '#e03a2a'); R(33, 21, 2, 1, '#2f2f33'); R(36, 19, 4, 2, '#9a2a20'); } // battery bay open, wires out
     else { R(28, 20, 8, 5, '#9a2a20'); R(29, 21, 6, 1, '#c8cfd0'); }
@@ -1028,9 +1032,15 @@ export class Renderer {
     const x = c.px, y = c.py, R = (a, b, w, h, col) => { v.fillStyle = col; v.fillRect(Math.round(a), Math.round(b), w, h); };
     let lift = 0;
     if (c.state === 'moving') { lift = (6 - c.t) * 6; v.globalAlpha = Math.max(0, c.t / 6); }
-    R(x - 9, y - 6 - lift, 18, 12, '#2b1d16'); R(x - 8, y - 5 - lift, 16, 10, '#4a5a3a'); R(x - 8, y - 5 - lift, 16, 2, '#5d6e48'); R(x - 2, y - 2 - lift, 4, 3, '#c9a24a');
-    if (c.state === 'cycling' || c.state === 'ready') { R(x - 8, y - 10 - lift, 16, 5, '#3a4a2e'); }
-    else { R(x - 6, y - 10 - lift, 7, 4, '#3a3a3e'); R(x - 5, y - 9 - lift, 2, 2, '#e2b53c'); } // radio
+    // a wooden supply crate: plank slats, iron corners, rope handle, a stencilled ? on a cream label
+    const cy = y - lift, open = c.state === 'cycling' || c.state === 'ready';
+    R(x - 9, cy - 6, 18, 12, '#2b1d16'); R(x - 8, cy - 5, 16, 10, '#a87a48');
+    for (const j of [-5, -2, 1]) { R(x - 8, cy + j, 16, 1, '#c49a62'); R(x - 8, cy + j + 2, 16, 1, '#7a5430'); }
+    for (const [a, b] of [[-8, -5], [6, -5], [-8, 3], [6, 3]]) { R(x + a, cy + b, 2, 2, '#4a4d52'); R(x + a, cy + b, 1, 1, '#8c8f86'); }
+    R(x - 3, cy - 3, 6, 5, '#e8dfc6'); R(x - 1, cy - 2, 2, 1, '#b5302a'); R(x, cy - 1, 1, 1, '#b5302a'); R(x, cy + 1, 1, 1, '#b5302a');
+    R(x - 10, cy - 2, 1, 3, '#c8b07a'); R(x + 9, cy - 2, 1, 3, '#c8b07a'); // rope handles
+    if (open) { R(x - 9, cy - 11, 18, 5, '#2b1d16'); R(x - 8, cy - 10, 16, 3, '#7a5430'); R(x - 8, cy - 10, 16, 1, '#c49a62'); R(x - 7, cy - 7, 14, 1, '#d8c070'); } // lid up, straw inside
+    else { R(x - 6, cy - 10, 7, 4, '#3a3a3e'); R(x - 5, cy - 9, 2, 2, '#e2b53c'); R(x - 2, cy - 12, 1, 2, '#6f787d'); } // her radio on top
     // lantern
     R(x + 9, y - 6, 4, 6, '#2b1d16'); R(x + 10, y - 5, 2, 4, '#f0b030');
     v.globalAlpha = 1;

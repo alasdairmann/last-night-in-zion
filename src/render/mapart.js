@@ -517,9 +517,10 @@ const RACK_COST = (id) => id.startsWith('t:') ? THROWS[id.slice(2)].cost : (MELE
 function rack(ctx, r) {
   const R = (a, b, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(a, b, w, h); };
   const px = r.x * TS, py = r.y * TS;
-  R(px - 2, py - 4, 20, 18, '#3a2e24'); R(px - 1, py - 3, 18, 16, '#c49a62'); R(px - 1, py - 3, 18, 1, '#d8b07a');
-  for (let i = 0; i < 18; i += 3) for (let j = 0; j < 16; j += 3) R(px - 1 + i + 1, py - 3 + j + 1, 1, 1, '#8f6a3e');
-  ctx.drawImage(iconWhite(r.item), px + 2, py - 2); // chalk outline of what's on offer
+  R(px - 2, py - 4, 20, 18, '#2b1d16'); R(px - 1, py - 3, 18, 16, '#4a4038'); R(px - 1, py - 3, 18, 1, '#6a5c50'); // dark pegboard so the item reads
+  for (let i = 0; i < 18; i += 3) for (let j = 0; j < 16; j += 3) R(px - 1 + i + 1, py - 3 + j + 1, 1, 1, '#2f2822');
+  ctx.globalAlpha = 0.35; ctx.drawImage(iconWhite(r.item), px + 2, py - 1); ctx.globalAlpha = 1; // its shadow on the board
+  ctx.drawImage(icon(r.item.replace('t:', '')), px + 1, py - 3); // the item itself, hung on the pegboard
   const cost = String(RACK_COST(r.item)), cw = pixelTextWidth(cost);
   R(px + 8 - cw / 2 - 2, py + 8, cw + 4, 7, '#6a4a10'); R(px + 8 - cw / 2 - 1, py + 9, cw + 2, 5, '#c9902a'); // amber price plate
   pixelText(ctx, cost, px + 8 - cw / 2, py + 9, '#2b1d16');
