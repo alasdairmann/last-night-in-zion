@@ -4,7 +4,7 @@ import { T } from '../tuning.js';
 import { buildStatic, MAP_HD } from './mapart.js';
 import { FAR_LIGHTS, HILLTOP } from './beyond.js';
 import { lampKind } from './scatter.js';
-import { charSprite, corpseSprite, viewForDir, icon, iconHD, hdOf, makeCanvas, shade, pixelText, pixelTextWidth } from './sprites.js';
+import { charSprite, corpseSprite, viewForDir, icon, hdOf, makeCanvas, shade, pixelText, pixelTextWidth } from './sprites.js';
 import { RAMP } from './palette.js';
 import { drawProfile, meleeCells, gunCells, chainsawCells } from './weapons.js';
 const cellCache = new Map();
@@ -386,8 +386,8 @@ export class Renderer {
         case 3: this.drawBarrel(v, it[2]); break;
         case 4: this.drawCrate(v, g, it[2]); break;
         case 5: this.drawFind(v, it[2]); break;
-        case 6: { const o = it[2]; v.fillStyle = 'rgba(0,0,0,0.3)'; v.fillRect(Math.round(o.x) - 2, Math.round(o.y), 4, 2); v.drawImage(iconHD(o.id), Math.round(o.x) - 7, Math.round(o.y - o.z) - 10, 14, 14); break; }
-        case 7: { const b = it[2]; const blink = Math.floor(this.time * (b.kind === 'pipe' && b.fuse ? 3 + 18 * (1 - b.t / b.fuse) : b.kind === 'pipe' ? 12 : 6)) % 2; if (b.kind === 'pipe' && blink) { v.globalAlpha = 0.35; this.pixelCircle(v, b.x, b.y - 4, 9, '#e03a2a'); v.globalAlpha = 1; } v.drawImage(iconHD(b.kind), Math.round(b.x) - 7 + (b.kind === 'alarm' && blink ? 1 : 0), Math.round(b.y) - 10, 14, 14); if (blink) { v.fillStyle = '#e03a2a'; v.fillRect(Math.round(b.x), Math.round(b.y) - 11, 2, 2); } break; }
+        case 6: { const o = it[2]; v.fillStyle = 'rgba(0,0,0,0.3)'; v.fillRect(Math.round(o.x) - 2, Math.round(o.y), 4, 2); v.drawImage(icon(o.id), Math.round(o.x) - 7, Math.round(o.y - o.z) - 10); break; }
+        case 7: { const b = it[2]; const blink = Math.floor(this.time * (b.kind === 'pipe' && b.fuse ? 3 + 18 * (1 - b.t / b.fuse) : b.kind === 'pipe' ? 12 : 6)) % 2; if (b.kind === 'pipe' && blink) { v.globalAlpha = 0.35; this.pixelCircle(v, b.x, b.y - 4, 9, '#e03a2a'); v.globalAlpha = 1; } v.drawImage(icon(b.kind), Math.round(b.x) - 7 + (b.kind === 'alarm' && blink ? 1 : 0), Math.round(b.y) - 10); if (blink) { v.fillStyle = '#e03a2a'; v.fillRect(Math.round(b.x), Math.round(b.y) - 11, 2, 2); } break; }
         case 8: this.drawGenerator(v, g); break;
         case 9: this.drawWorkshop(v, g); break;
         case 10: this.drawTrapSwitch(v, g, it[2]); break;
@@ -395,7 +395,7 @@ export class Renderer {
         case 12: this.drawBiscuit(v, g, it[2], it[3], it[4] ?? it[0]); break;
         case 13: this.drawWorldItem(v, it[2]); break;
         case 14: this.drawEngine(v, g, it[2], it[3], it[4]); break;
-        case 15: { const d = it[2], drop = Math.max(0, 1 - d.t / 2) * 120; v.fillStyle = 'rgba(0,0,0,0.3)'; v.fillRect(Math.round(d.x) - 7, Math.round(d.y), 14, 3); if (drop > 0) { v.fillStyle = '#e8dfc6'; v.fillRect(Math.round(d.x) - 10, Math.round(d.y - drop - 26), 20, 8); v.fillStyle = '#8c8f86'; v.fillRect(Math.round(d.x), Math.round(d.y - drop - 18), 1, 8); } v.drawImage(iconHD('supplies'), Math.round(d.x) - 7, Math.round(d.y - drop) - 12, 14, 14); break; }
+        case 15: { const d = it[2], drop = Math.max(0, 1 - d.t / 2) * 120; v.fillStyle = 'rgba(0,0,0,0.3)'; v.fillRect(Math.round(d.x) - 7, Math.round(d.y), 14, 3); if (drop > 0) { v.fillStyle = '#e8dfc6'; v.fillRect(Math.round(d.x) - 10, Math.round(d.y - drop - 26), 20, 8); v.fillStyle = '#8c8f86'; v.fillRect(Math.round(d.x), Math.round(d.y - drop - 18), 1, 8); } v.drawImage(icon('supplies'), Math.round(d.x) - 7, Math.round(d.y - drop) - 12); break; }
         case 17: { const w = it[2]; this.drawBus(v, { x: w.px, y: w.py }); break; }
         case 19: { // a low dark gap in the Red Lion's wall with a rubber flap, just big enough for Biscuit
           const f = it[2], x = Math.round(f.px) - 5, y = Math.round(f.py) - 9;
@@ -590,7 +590,7 @@ export class Renderer {
     }
     if (!behind && !carrying) this.drawWeapon(v, g, x, y);
     if (p.jerry) { const jx = Math.round(x) - 3, jy = Math.round(y) - 15; v.fillStyle = '#2b1d16'; v.fillRect(jx - 1, jy - 1, 8, 9); v.fillStyle = '#b5503b'; v.fillRect(jx, jy, 6, 7); v.fillStyle = '#d06a50'; v.fillRect(jx, jy, 6, 1); v.fillStyle = '#7a2a22'; v.fillRect(jx, jy + 4, 6, 1); v.fillStyle = '#2b1d16'; v.fillRect(jx + 4, jy - 2, 2, 2); }
-    else if (p.carry) { const bob = p.walking ? Math.floor(p.animT * 8) % 2 : 0; v.drawImage(iconHD(p.carry.item), Math.round(x) - 7, Math.round(y) - 23 - bob, 14, 14); if (p.carry.ticking !== undefined && Math.floor(this.time * 8) % 2) { v.fillStyle = '#e03a2a'; v.fillRect(Math.round(x) + 3, Math.round(y) - 24, 2, 2); } }
+    else if (p.carry) { const bob = p.walking ? Math.floor(p.animT * 8) % 2 : 0; v.drawImage(icon(p.carry.item), Math.round(x) - 7, Math.round(y) - 23 - bob); if (p.carry.ticking !== undefined && Math.floor(this.time * 8) % 2) { v.fillStyle = '#e03a2a'; v.fillRect(Math.round(x) + 3, Math.round(y) - 24, 2, 2); } }
     if (spin) this.drawSpin(v, g, spin);
   }
   // power attack release: a full circular smear in the weapon's colour
@@ -695,10 +695,10 @@ export class Renderer {
   drawWorldItem(v, w) {
     const bob = Math.round(Math.sin(this.time * 4 + w.x) * 1.5);
     const key = w.kind === 'weapon' ? w.weapon : w.item === 'flare' ? 'flare_item' : w.item;
-    if (w.glint) { if (Math.floor(this.time * 2 + w.x) % 5 === 0) { v.fillStyle = '#ffffff'; v.fillRect(Math.round(w.x) + 2, Math.round(w.y) - 12, 1, 1); } v.globalAlpha = 0.85; v.drawImage(iconHD(key), Math.round(w.x) - 7, Math.round(w.y) - 10, 14, 14); v.globalAlpha = 1; return; }
+    if (w.glint) { if (Math.floor(this.time * 2 + w.x) % 5 === 0) { v.fillStyle = '#ffffff'; v.fillRect(Math.round(w.x) + 2, Math.round(w.y) - 12, 1, 1); } v.globalAlpha = 0.85; v.drawImage(icon(key), Math.round(w.x) - 7, Math.round(w.y) - 10); v.globalAlpha = 1; return; }
     const glowC = w.kind === 'weapon' ? CONDITIONS[w.cond ?? 1].color : w.kind === 'part' ? '#c49a62' : w.errand || w.glow ? '#6cbf4a' : '#e2b53c';
     v.globalAlpha = 0.35; this.pixelCircle(v, w.x, w.y, 6 + (Math.floor(this.time * 3) % 2), glowC); v.globalAlpha = 1;
-    v.drawImage(iconHD(key), Math.round(w.x) - 7, Math.round(w.y) - 14 + bob, 14, 14);
+    v.drawImage(icon(key), Math.round(w.x) - 7, Math.round(w.y) - 14 + bob);
     if (w.ticking !== undefined && Math.floor(this.time * 8) % 2) { v.fillStyle = '#e03a2a'; v.fillRect(Math.round(w.x) + 3, Math.round(w.y) - 15, 2, 2); }
   }
   // D7 fire engine: a red cab-forward pump with a white roof stripe, ladder, rolled hose, chrome lockers and a blue
@@ -1037,7 +1037,7 @@ export class Renderer {
     // the spin shows each candidate with its worth in Scrap, so a jackpot is visibly on the wheel; the last half-second lands on the real item
     const show = (id, bob = 0, big = false) => {
       const ix = Math.round(x) - 7, iy = Math.round(y) - 26 - bob;
-      v.drawImage(iconHD(id.replace('t:', '')), ix, iy, 14, 14);
+      v.drawImage(icon(id.replace('t:', '')), ix, iy);
       if (id === 'closed') return;
       const val = itemValue(id), txt = val ? String(val) : '?', col = valueTint(val), w = pixelTextWidth(txt);
       v.fillStyle = 'rgba(27,20,16,0.85)'; v.fillRect(Math.round(x - w / 2) - 2, iy - 8, w + 4, 7);
@@ -1060,7 +1060,7 @@ export class Renderer {
     const r = 7 + (Math.floor(this.time * 3) % 2) * 2;
     v.fillStyle = f.rotten ? 'rgba(140,200,60,0.35)' : 'rgba(240,176,48,0.35)';
     this.pixelCircle(v, f.x, f.y, r, v.fillStyle);
-    v.drawImage(iconHD(f.type), Math.round(f.x) - 7, Math.round(f.y) - 14 + bob, 14, 14);
+    v.drawImage(icon(f.type), Math.round(f.x) - 7, Math.round(f.y) - 14 + bob);
     if (f.rotten) { v.fillStyle = '#8cc83c'; v.fillRect(Math.round(f.x) + 4, Math.round(f.y) - 16 + bob, 3, 3); }
   }
   // D7 generator: a diesel genset on skids, hazard frame, exhaust with spark arrester, fuel gauge, 3 LEDs,
@@ -1092,7 +1092,7 @@ export class Renderer {
     if (ws.state === 'working' && Math.random() < 0.5) this.spark(ws.px + (Math.random() - 0.5) * 16, ws.py + 6);
     if (ws.state === 'ready' && ws.w) {
       const bob = Math.floor(this.time * 3) % 2;
-      v.drawImage(iconHD(ws.w.id), ws.px - 7, ws.py - 10 - bob, 14, 14);
+      v.drawImage(icon(ws.w.id), ws.px - 7, ws.py - 10 - bob);
     }
     if (g.power) { v.fillStyle = '#6cbf4a'; v.fillRect(ws.px + 18, ws.py - 2, 2, 2); }
   }
