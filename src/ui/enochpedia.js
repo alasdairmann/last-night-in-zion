@@ -275,6 +275,30 @@ export function wirePedia(root, screen, rerender, keys) {
     body.scrollTop = 0;
   };
   box.addEventListener('input', run);
+  // Mobile: search sits behind an icon; map hotspots open on tap; the map pinch-zooms
+  if (document.body.classList.contains('mobile')) {
+    const ic = document.createElement('button'); ic.className = 'psicon'; ic.setAttribute('aria-label', 'Search'); ic.textContent = '\u2315';
+    tabsEl.appendChild(ic); if (!box.value) box.classList.add('hide');
+    ic.addEventListener('click', () => { box.classList.toggle('hide'); if (!box.classList.contains('hide')) box.focus(); });
+  }
+  if (document.body.classList.contains('touch') || document.body.classList.contains('mobile')) {
+    host.addEventListener('click', (e) => { const sp = e.target.closest('.pediamap .spot'); root.querySelectorAll('.pediamap .spot.on').forEach((o) => { if (o !== sp) o.classList.remove('on'); }); if (sp) sp.classList.toggle('on'); });
+    const map = root.querySelector('.pediamap');
+    if (map) {
+      const pts = new Map(); let z = 1, z0 = 1, d0 = 0, ox = 0, oy = 0, last = null;
+      const apply = () => { map.style.transform = `translate(${ox}px, ${oy}px) scale(${z})`; };
+      map.style.transformOrigin = '0 0'; map.style.touchAction = 'none';
+      map.addEventListener('pointerdown', (e) => { pts.set(e.pointerId, [e.clientX, e.clientY]); if (pts.size === 2) { const [a, b] = [...pts.values()]; d0 = Math.hypot(a[0] - b[0], a[1] - b[1]); z0 = z; } last = [e.clientX, e.clientY]; });
+      map.addEventListener('pointermove', (e) => {
+        if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]);
+        if (pts.size === 2) { const [a, b] = [...pts.values()]; z = Math.max(1, Math.min(4, z0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / (d0 || 1))); }
+        else if (z > 1 && last) { ox += e.clientX - last[0]; oy += e.clientY - last[1]; }
+        const w = map.offsetWidth, h = map.offsetHeight; ox = Math.min(0, Math.max(w - w * z, ox)); oy = Math.min(0, Math.max(h - h * z, oy)); last = [e.clientX, e.clientY]; apply();
+      });
+      const end = (e) => { pts.delete(e.pointerId); last = null; };
+      map.addEventListener('pointerup', end); map.addEventListener('pointercancel', end);
+    }
+  }
   if (box.value) { run(); box.focus(); }
   screen.focusSearch = () => box.focus();
 }

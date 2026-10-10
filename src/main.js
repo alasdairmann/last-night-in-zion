@@ -1,7 +1,7 @@
 // Boot, fixed-timestep loop (60 Hz, max 5 catch-up ticks), scene switching (PRD §27.2).
 import { T } from './tuning.js';
 import { Game } from './sim/game.js';
-import { Input } from './input.js';
+import { Input, labels, bindLabels } from './input.js';
 import { Renderer } from './render/renderer.js';
 import { Hud } from './render/hud.js';
 import { AudioEngine } from './audio/audio.js';
@@ -27,10 +27,13 @@ const hud = new Hud(S, store);
 const audio = new AudioEngine(S);
 const input = new Input(S);
 layout.init(S);
+bindLabels(S.keys); labels.touch = layout.touch;
 let scale = renderer.resize(layout.mode);
+hud.mode = layout.mode; hud.touchUI = layout.touch;
 renderer.reduceFx = layout.mode === 'mobile' && S.mobileFx !== 'full';
 const rotateEl = document.getElementById('rotate');
 layout.on(({ changed }) => {
+  labels.touch = layout.touch; hud.touchUI = layout.touch; hud.mode = layout.mode;
   scale = renderer.resize(layout.mode);
   renderer.reduceFx = layout.mode === 'mobile' && S.mobileFx !== 'full';
   if (changed && ui.open) ui.render();

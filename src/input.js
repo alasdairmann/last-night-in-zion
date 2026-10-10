@@ -14,8 +14,25 @@ export const ACTION_NAMES = {
 };
 const ARROWS = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
 
+// While touch is active there are no key names anywhere (Mobile & Touch PRD, global rules): keyLabel() returns the
+// glyph of the touch control for that action, and touchCopy() rewrites key names in other text.
+export const labels = { touch: false };
+const GLYPH = { attack: '✊', interact: '☝', shove: '✋', throw: '➶', trick: '★', dog: '🐕', map: '▦', lock: '🔒', reload: '↻', prev: '◀', next: '▶', pause: '❚❚', log: '❚❚', up: '↑', down: '↓', left: '←', right: '→' };
+let keysRef = null;
+export function bindLabels(keys) { keysRef = keys; }
+export function touchCopy(s) {
+  if (!labels.touch || !s) return s;
+  return String(s)
+    .replace(/<kbd>X<\/kbd>/g, 'the Trick button ★').replace(/\b([Hh]old|[Pp]ress and hold|[Pp]ress) F\b/g, (m, a) => `${a} the context button`)
+    .replace(/\b([Tt]ap) Z\b/g, '$1 the dog button').replace(/\bHold Z\b/g, 'Hold the dog button').replace(/\bZ: /g, 'Dog button: ')
+    .replace(/\bG drops it/g, 'Throw drops it').replace(/\btap X\b/g, 'tap the Trick button').replace(/\bLeft \/ Right\b/g, 'The arrows')
+    .replace(/\b1-4 switch weapons/g, 'the weapon chip switches weapons').replace(/\b1-4\b/g, 'the weapon chip').replace(/\b(Esc|ESC)\b/g, 'Back')
+    .replace(/\bHover anything\b/g, 'Tap and hold anything').replace(/\bHOVER FOR DETAILS\b/g, 'TAP AND HOLD FOR DETAILS').replace(/\bthe map key\b/g, 'the minimap');
+}
+
 export function keyLabel(code) {
   if (!code) return '?';
+  if (labels.touch) { const a = keysRef && Object.keys(keysRef).find((k) => keysRef[k] === code); return (a && GLYPH[a]) || (code === 'Escape' ? '❚❚' : '•'); }
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
   return ({ Space: 'SPACE', ShiftLeft: 'SHIFT', ShiftRight: 'SHIFT', Tab: 'TAB', Escape: 'ESC', ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT', ControlLeft: 'CTRL', Enter: 'ENTER' })[code] || code;

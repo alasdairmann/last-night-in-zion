@@ -6,7 +6,7 @@ import { COMFORTS, FINDS, GUNS, MELEE, THROWS, COMFORT_INFO, EFFECTS, CONDITIONS
 import { weaponName } from '../sim/game.js';
 import { FLOOR, WALL, BLD, DOOR, BAR, PROP } from '../map/town.js';
 import { mapPOIs, paintTownMap, paintStreetNames } from '../ui/poi.js';
-import { keyLabel } from '../input.js';
+import { keyLabel, touchCopy } from '../input.js';
 import { glyph as glyphBlock } from '../touch.js';
 
 const VW = T.view.w, VH = T.view.h;
@@ -78,6 +78,7 @@ export class Hud {
     return this.pushCard({ ...b, prio }, g);
   }
   pushCard(c, g) {
+    if (this.touchUI) c = { ...c, text: touchCopy(c.text), sub: touchCopy(c.sub) };
     const C = T.cards, key = c.key || `${c.text}|${c.sub || ''}`, now = this.time;
     const live = this.cards.find((o) => o.key === key && !o.gone);
     if (live && (live.prio === 'critical' || c.update)) { Object.assign(live, { text: c.text, sub: c.sub, pin: c.pin || live.pin, code: c.code }); live.flash = 0.4; this.note(g, c.sub ? `${c.text}: ${c.sub}` : c.text, live.prio === 'critical' ? 'danger' : c.prio, { pin: live.pin, code: c.code }); return; }
@@ -94,6 +95,7 @@ export class Hud {
   resolveCard(key) { for (const c of this.cards) if (c.key === key && c.t < c.life - 0.3) c.t = c.life - 0.3; }
   dismissCard(c) { c.t = Math.max(c.t, c.life - 0.3); if (c.prio === 'critical') this.cardSeen.set(c.key, this.time); }
   note(g, text, kind = 'banner', extra = {}) {
+    if (this.touchUI) text = touchCopy(text);
     if (!text || (g && g.attract)) return;
     const wave = g ? g.round : this.lastRound;
     const last = this.notes[0]; if (last && last.text === text && last.wave === wave) return;
@@ -104,6 +106,13 @@ export class Hud {
     this.tutQueue.push({ key, delay });
   }
   tutText(key) {
+    if (this.touchUI) return {
+      shift: 'Hold Attack, or tap the lock, to keep facing while you move', repair: 'Hold the context button to board the barricade: free, and it pays Scrap',
+      shove: 'Tap the open hand to shove them back', buy: 'Hold the context button to buy with Scrap', swap: 'Tap the weapon chip to switch; hold it for every slot',
+      throw: 'Tap the brick to throw it', map: this.mode === 'mobile' ? 'Hold the minimap for the town map' : 'Hold the map button for the town map',
+      trick: 'Trick ready! Tap the Trick button', dog: 'Tap the dog button to send Biscuit; hold it to make him stay',
+      looter: 'The Looter runs between town caches. Hit him once and he drops half his haul; kill him for the rest', carry: 'Carrying: no guns. Throw drops it',
+    }[key];
     const k = this.settings.keys;
     return {
       shift: `Hold ${keyLabel(k.lock)} to keep facing while you move`,
@@ -284,7 +293,8 @@ export class Hud {
     this.plaque(c, x, y, w, 30, { body: '#3a2a1e' });
     this.text(c, `THE CELLARS  ${i}/${n}`, VW / 2, y + 3, { size: 6, align: 'center', color: C.khaki });
     this.text(c, `\u2190  ${to ? to.name : 'STAY HERE'}  \u2192`, VW / 2, y + 11, { size: 8, align: 'center', color: busy ? C.red : C.cream });
-    this.text(c, busy ? 'The dead are up there' : to ? `${F}: climb out here   ESC: stay` : `${F} or ESC: climb back up where you came in`, VW / 2, y + 21, { size: 5, align: 'center', color: busy ? C.red : C.khaki });
+    const hint = busy ? 'The dead are up there' : to ? `${F}: climb out here   ESC: stay` : `${F} or ESC: climb back up where you came in`;
+    this.text(c, this.touchUI ? touchCopy(hint) : hint, VW / 2, y + 21, { size: 5, align: 'center', color: busy ? C.red : C.khaki });
   }
   drawPrompt(c, g, W2S) {
     const pr = g.prompt, C = this.C;
@@ -338,7 +348,7 @@ export class Hud {
   drawBottomLeft(c, g) {
     const C = this.C, p = g.p;
     // comforts row (hover for what each does, §v1.1 feedback)
-    const cap = Math.min(g.comfortSlotMax() + 1, g.comfortCap()); let x = 6; const y = VH - 86;
+    const cap = Math.min(g.comfortSlotMax() + 1, g.comfortCap()); let x = 6; const y = this.mode === 'tablet' ? 74 : VH - 86; // Tablet: off the thumb corner
     const held = p.comforts.filter((id) => id !== 'bandages'); // v1.4 F6: Bandages have their own slot
     for (let i = 0; i < Math.max(cap, held.length); i++) {
       const id = held[i];
@@ -588,7 +598,8 @@ export class Hud {
   // click a HUD element: its tooltip stays up for a few seconds and fades, even after the mouse leaves
   click(x, y) {
     const cr = this.cardRects.find((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h); if (cr) { this.dismissCard(cr.card); return; }
-    const h = this.hovers.find((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+    const pad = (r) => (this.mode === 'tablet' ? Math.max(0, (44 / this.s - Math.min(r.w, r.h)) / 2) : 0);
+    const h = this.hovers.find((r) => { const e = pad(r); return x >= r.x - e && x <= r.x + r.w + e && y >= r.y - e && y <= r.y + r.h + e; });
     this.pinned = h ? { key: h.id || h.title, at: { x, y }, t: 0 } : null;
   }
   drawTooltip(c) {
@@ -604,6 +615,7 @@ export class Hud {
     c.globalAlpha = alpha; this.drawTip(c, h, at); c.globalAlpha = 1;
   }
   drawTip(c, h, m) {
+    if (this.touchUI) h = { ...h, body: touchCopy(h.body), extra: touchCopy(h.extra) };
     const C = this.C, w = 170;
     const body = this.wrap(c, h.body, w - 10, 6), extra = h.extra ? this.wrap(c, h.extra, w - 10, 6) : [];
     const ht = 14 + body.length * 8 + (extra.length ? 3 + extra.length * 8 : 0);
@@ -620,6 +632,9 @@ export class Hud {
     // other slots
     let sx = VW - 6;
     const th = p.throwable;
+    // Tablet: the slot strip and pocket move to bottom-centre, off the right thumb
+    const tab = this.mode === 'tablet', h0 = this.hovers.length, nG = g.hasComfort('mule') ? 3 : 2, tdx = tab ? Math.round(VW / 2 - (VW - 6 - (30 + 20 * (nG + 1)) / 2)) : 0, tdy = tab ? VH - 4 - by : 0;
+    if (tab) { c.save(); c.translate(tdx, tdy); }
     sx -= 30; this.plaque(c, sx, by - 22, 30, 16); this.icon(c, th.id, sx + 1, by - 21); this.text(c, String(th.count), sx + 26, by - 18, { font: NUM, weight: '400', size: 8, align: 'right', color: th.count ? C.amber : C.khaki });
     this.text(c, `POCKET ${keyLabel(this.settings.keys.throw)}`, sx + 15, by - 31, { size: 5, align: 'center', color: C.khaki });
     this.hovers.push({ x: sx, y: by - 22, w: 30, h: 16, title: 'Pocket', body: `Throwables, thrown with ${keyLabel(this.settings.keys.throw)}. Buying a throwable replaces what is in your pocket.` });
@@ -634,6 +649,7 @@ export class Hud {
       else this.inset(c, sx + 3, by - 19, 10, 10);
       this.text(c, String(i + 1), sx + 1, by - 23, { font: NUM, weight: '400', size: 5, color: C.khaki });
     }
+    if (tab) { c.restore(); for (let i = h0; i < this.hovers.length; i++) this.hovers[i] = { ...this.hovers[i], x: this.hovers[i].x + tdx, y: this.hovers[i].y + tdy }; }
     this.plaque(c, bx, by, bw, bh);
     if (p.chainsawT > 0) {
       this.icon(c, 'chainsaw', bx + 2, by + 2, 2);
@@ -1055,6 +1071,7 @@ export class Hud {
     if (this.mapOpen) { const bx = v.W - v.R - 56, by = v.T + 8; this.plaque(c, bx, by, 44, 44); glyphBlock(c, 'close', bx + 22, by + 22, 16, this.C.cream); this.mt.push({ x: bx, y: by, w: 44, h: 44, id: 'mapClose' }); }
   }
   mobileTip(c, h, mx, my, v) {
+    h = { ...h, body: touchCopy(h.body), extra: touchCopy(h.extra) };
     const C = this.C, w = 250, body = this.wrap(c, h.body || '', w - 16, 12), extra = h.extra ? this.wrap(c, h.extra, w - 16, 11) : [];
     const ht = 26 + body.length * 15 + (extra.length ? 4 + extra.length * 14 : 0);
     const x = Math.max(v.L + 6, Math.min(v.W - v.R - w - 6, mx - w / 2)); let y = my - ht - 28; if (y < v.T + 6) y = my + 28;

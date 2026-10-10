@@ -284,7 +284,7 @@ export class TouchInput {
         txt(c, `/${w.reserve}`, tx + mw + 3 * U, b.y + 2 * U, Math.round(11 * U), '#b8ae8a', NUM, 'middle', '400', 'left'); }
       if (p.reloadT > 0) txt(c, 'RELOADING', b.x, y0 - 9 * U, Math.round(10 * U), '#b8ae8a', NUM, 'middle');
       else if (b.empty) txt(c, 'TAP TO RELOAD', b.x, y0 - 9 * U, Math.round(10 * U), '#ff8a70', NUM, 'middle');
-    } else txt(c, weaponName(w).toUpperCase().slice(0, 12), tx, b.y, Math.round(11 * U), '#f0ead8', NUM, 'middle', '400', 'left');
+    } else { let n = weaponName(w).toUpperCase(); c.font = `400 ${Math.round(10 * U)}px ${NUM}`; const room = b.w - b.h - 10 * U; while (n.length > 3 && c.measureText(n).width > room) n = n.slice(0, -1); txt(c, n, tx, b.y, Math.round(10 * U), '#f0ead8', NUM, 'middle', '400', 'left'); }
   }
 }
 
@@ -295,7 +295,7 @@ function ring(c, x, y, r, fill, edge, lw) {
 }
 function icon(c, key, x, y, size) {
   let im; try { im = iconHD(key); } catch { return; } if (!im) return;
-  const s = Math.max(14, Math.floor(size / 14) * 14 || size); c.imageSmoothingEnabled = false; c.drawImage(im, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
+  const s = Math.max(14, Math.round(size / 7) * 7); c.imageSmoothingEnabled = false; c.drawImage(im, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
 }
 export function txt(c, s, x, y, size, color, font = LBL, base = 'middle', weight = '900', align = 'center') {
   c.font = `${weight} ${Math.max(10, size)}px ${font}`; c.textAlign = align; c.textBaseline = base;

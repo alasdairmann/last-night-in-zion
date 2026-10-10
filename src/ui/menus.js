@@ -1,5 +1,6 @@
 // DOM menus with Enoch's plaque tokens (PRD §26). Fully keyboard navigable (W/S or arrows, Enter/Space, Esc).
-import { ACTION_NAMES, keyLabel } from '../input.js';
+import { ACTION_NAMES, keyLabel, touchCopy } from '../input.js';
+import { TOUCH_ACTIONS } from '../touch.js';
 import { ZONE_NAMES, TRICKS, TAPES, WEATHER, ITEMS, ITEM_USES, THROWS, GUNS, CONDITIONS } from '../data.js';
 import { weaponName } from '../sim/game.js';
 import { pediaTabs, mapHtml, wirePedia } from './enochpedia.js';
@@ -25,17 +26,18 @@ export class UI {
     const s = this.top; if (!s) return;
     this.root.classList.add('on');
     this.root.className = 'ui on ' + (s.cls || '');
-    const items = this.items();
+    const items = this.items(), touch = !!this.hooks.layout?.touch;
     if (this.sel >= items.length) this.sel = Math.max(0, items.length - 1);
     const rows = items.map((it, i) => {
       const cur = i === this.sel ? ' sel' : '';
       let val = '';
       if (it.type === 'slider') { const v = it.get(); val = `<span class="bar">${'<i></i>'.repeat(Math.round(v * 10))}${'<b></b>'.repeat(10 - Math.round(v * 10))}</span>`; }
+      else if ((it.type === 'toggle' || it.type === 'select') && touch && it.options.length <= 4) val = `<span class="seg">${it.options.map((o) => `<b data-o="${esc(o)}" class="${o === it.get() ? 'on' : ''}">${esc(o === 'auto' && it.show ? it.show() : o)}</b>`).join('')}</span>`;
       else if (it.type === 'toggle' || it.type === 'select') val = `<span class="val">${esc(it.show ? it.show() : it.get())}</span>`;
       else if (it.type === 'key') val = `<span class="key${this.capture === it ? ' wait' : ''}">${this.capture === it ? 'PRESS A KEY' : esc(keyLabel(it.get()))}</span>`;
       return `<li class="item ${it.type || 'button'}${cur}${it.primary ? ' primary' : ''}${it.danger ? ' danger' : ''}" data-i="${i}"><span class="lbl">${esc(it.label)}</span>${val}</li>`;
     }).join('');
-    let html = s.html || '';
+    let html = typeof s.html === 'function' ? s.html() : s.html || '';
     // v1.4 A2: below 900 px the pause screen is tabs (Menu / Notes / Map) instead of side-by-side panels
     const small = s.side && window.innerWidth < 900;
     if (small) {
@@ -51,6 +53,7 @@ export class UI {
       html = `<div class="tabs">${tabs.map((t, i) => `<span class="tab${i === s.tab ? ' on' : ''}" data-t="${i}">${esc(t.name)}</span>`).join('')}</div><div class="tabbody">${tabs[s.tab].html}</div>`;
     }
     const side = typeof s.side === 'function' ? s.side() : s.side;
+    if (touch) html = touchCopy(html);
     // touch: a back arrow replaces Esc
     const back = this.hooks.layout?.touch && (this.stack.length > 1 || (s.onBack && !s.noBack)) ? '<button class="back" aria-label="Back">&#9664;</button>' : '';
     this.root.innerHTML = `<div class="plaque ${s.wide ? 'wide' : ''} ${s.tabs ? 'tabbed' : ''}">${back}${s.title ? `<h1>${s.title}</h1>` : ''}${html}${rows && !(small && s.smallTab) ? `<ul class="menu">${rows}</ul>` : ''}${s.foot ? `<div class="foot">${s.foot}</div>` : ''}</div>${side && !small ? `<aside class="tray">${side}</aside>` : ''}`;
@@ -65,6 +68,8 @@ export class UI {
         this.sel = +el.dataset.i;
         // touch: tap a slider where you want it
         const it = this.items()[this.sel], bar = el.querySelector('.bar');
+        const seg = e.target.closest && e.target.closest('.seg b');
+        if (seg && it) { it.set(seg.dataset.o); this.store.save(); this.render(); return; }
         if (it && it.type === 'slider' && bar && this.hooks.layout?.touch) { const r = bar.getBoundingClientRect(); it.set(Math.max(0, Math.min(1, Math.round((e.clientX - r.left) / r.width * 10) / 10))); this.store.save(); this.render(); return; }
         this.activate(0);
       });
@@ -119,11 +124,13 @@ export class UI {
 
   // ---------- screens ----------
   mainMenu() {
-    const best = this.store.best;
+    const best = this.store.best, self = this;
+    const ios = /iP(hone|ad|od)/.test(navigator.userAgent) && !navigator.standalone;
+    const hint = () => (this.hooks.layout?.touch ? `<p class="tapstart">Tap Play to start${ios ? '. For fullscreen: Share, then Add to Home Screen' : ''}</p>` : '');
     let save = null; try { const raw = this.store.loadLatest(); if (raw) save = { meta: JSON.parse(raw).meta || { round: '?' } }; } catch { save = null; }
     this.show({
       cls: 'title', after: (r) => mountTitleArt(r.querySelector('.tbanner')),
-      html: `<h1 class="sr">Last Night in Zion</h1><canvas class="tbanner"></canvas>${best ? `<p class="best">Personal best: wave <b>${best}</b>${this.store.rec.escapes ? ` &middot; Escapes: <b>${this.store.rec.escapes}</b> (earliest wave ${this.store.rec.bestEscapeRound})` : ''}${this.store.rec.signalComplete ? ' &middot; <b title="The Signal answered">&#128251;</b>' : ''}${this.store.rec.bestScore ? ` &middot; Best score: <b>${this.store.rec.bestScore.toLocaleString('en-GB')}</b>` : ''}</p>` : ''}`,
+      html: () => `<h1 class="sr">Last Night in Zion</h1><canvas class="tbanner"></canvas>${hint()}${best ? `<p class="best">Personal best: wave <b>${best}</b>${this.store.rec.escapes ? ` &middot; Escapes: <b>${this.store.rec.escapes}</b> (earliest wave ${this.store.rec.bestEscapeRound})` : ''}${this.store.rec.signalComplete ? ' &middot; <b title="The Signal answered">&#128251;</b>' : ''}${this.store.rec.bestScore ? ` &middot; Best score: <b>${this.store.rec.bestScore.toLocaleString('en-GB')}</b>` : ''}</p>` : ''}`,
       items: [
         ...(save ? [{ label: `Continue (wave ${save.meta.round})`, primary: true, action: () => this.hooks.cont() }] : []),
         { label: save ? 'New run' : 'Play', primary: !save, action: () => this.hooks.play() },
@@ -131,12 +138,16 @@ export class UI {
         { label: 'How to play', action: () => this.howTo() },
         { label: 'Settings', action: () => this.settings() },
         { label: 'Credits', action: () => this.credits() },
+        { label: 'Fullscreen', action: () => this.hooks.fullscreen(), get hidden() { return !self.hooks.layout?.touch || !document.documentElement.requestFullscreen || !!document.fullscreenElement; } },
       ],
       foot: 'W / S to choose &middot; ENTER to select',
       onBack: () => {}, noBack: true,
     });
   }
   howTo() {
+    if (this.hooks.layout?.touch) {
+      return this.push({ wide: true, title: 'How to play', html: `${this.touchDiagram()}<ol class="rules"><li>Kill the dead for <b>Scrap</b>. Melee kills pay the most.</li><li>Spend Scrap at racks, doors and the crate: hold the context button.</li><li>Repair barricades between fights.</li><li>Find the <b>generator</b> in the fire station.</li><li>Guns are loud. Melee is quiet.</li></ol>`, items: [{ label: 'Back', action: () => this.pop() }] });
+    }
     const k = this.store.settings.keys, L = keyLabel;
     const keys = [
       ['\u2190 \u2191 \u2193 \u2192', 'Move (you face the way you move)'],
@@ -179,11 +190,27 @@ export class UI {
       { label: 'Colour-blind assist', type: 'toggle', options: ['off', 'on'], get: () => (S.colourBlind ? 'on' : 'off'), set: (v) => { S.colourBlind = v === 'on'; document.body.classList.toggle('cb', S.colourBlind); } },
       { label: 'Layout', type: 'select', options: ['auto', 'desktop', 'tablet', 'mobile'], get: () => S.layout, show: () => this.hooks.layout.label(), set: (v) => { S.layout = v; this.hooks.layout.update(); } },
       { label: 'Touch controls', type: 'select', options: ['auto', 'always', 'off'], get: () => S.touch, set: (v) => { S.touch = v; this.hooks.layout.update(); } },
+      { label: 'Control size', type: 'select', options: ['s', 'm', 'l'], get: () => S.touchSize, set: (v) => { S.touchSize = v; }, get hidden() { return !self.hooks.layout.touch; } },
+      { label: 'Control opacity', type: 'slider', get: () => S.touchOpacity, set: (v) => { S.touchOpacity = Math.max(0.2, v); }, get hidden() { return !self.hooks.layout.touch; } },
+      { label: 'Left-handed', type: 'toggle', options: ['off', 'on'], get: () => (S.leftHanded ? 'on' : 'off'), set: (v) => { S.leftHanded = v === 'on'; }, get hidden() { return !self.hooks.layout.touch; } },
+      { label: 'Vibration', type: 'toggle', options: ['on', 'off'], get: () => (S.vibrate ? 'on' : 'off'), set: (v) => { S.vibrate = v === 'on'; }, get hidden() { return !self.hooks.layout.touch || !navigator.vibrate; } },
       { label: 'Fullscreen', action: () => this.hooks.fullscreen() },
-      { label: 'Controls', action: () => this.controls() },
+      { label: 'Controls', action: () => (this.hooks.layout.touch ? this.touchLegend() : this.controls()) },
       { label: 'Back', action: () => this.pop() },
     ];
     this.push({ title: 'Settings', items });
+  }
+  // touch: a read-only legend instead of key rebinding
+  touchLegend() {
+    this.push({ title: 'Touch controls', html: `<table class="stats legend">${Object.values(TOUCH_ACTIONS).map((t) => { const k = t.indexOf(': '); return `<tr><td>${esc(k > 0 ? t.slice(0, k) : t)}</td><td>${esc(k > 0 ? t.slice(k + 2) : '')}</td></tr>`; }).join('')}</table><p>Size, opacity, left-handed and vibration are in Settings.</p>`, items: [{ label: 'Back', action: () => this.pop() }] });
+  }
+  // the touch How to play: a labelled diagram of the controls
+  touchDiagram() {
+    const mob = this.hooks.layout?.mode === 'mobile', L = !!this.store.settings.leftHanded, X = (x) => (L ? 100 - x : x);
+    const spots = [['stick', 16, 72, 'Move'], ['lock', 4, 90, 'Lock'], ['attack', 90, 80, 'Attack'], ['shove', 77, 80, 'Shove'], ['throw', 78, 66, 'Throw'], ['trick', 83, 56, 'Trick'], ['dog', 90, 52, 'Biscuit'], ['interact', 75, 40, 'Context'], ['chip', 62, 90, 'Weapon'], ['pause', 96, 9, 'Pause'], ['map', mob ? 82 : 89, 9, mob ? 'Minimap' : 'Map']];
+    if (mob) spots.push(['satchel', 89, 9, 'Satchel']);
+    return `<div class="tdiag">${mob ? '<div class="tbar">health · wave · objective · buffs</div>' : ''}${spots.map(([id, x, y, n], i) => `<span class="dot ${id}" style="left:${X(x)}%;top:${y}%">${i + 1}</span>`).join('')}</div>
+      <ol class="tlegend">${spots.map(([id, , , n]) => `<li><b>${n}</b> ${esc((TOUCH_ACTIONS[id] || (id === 'satchel' ? 'Satchel: comforts, bandages and status' : '')).replace(/^[^:]*: ?/, ''))}</li>`).join('')}</ol>`;
   }
   controls() {
     const K = this.store.settings.keys;
@@ -212,7 +239,7 @@ export class UI {
     });
   }
   confirmQuit() {
-    this.push({ title: 'Quit this run?', html: '<p>Anything since your last save is lost. Save first from the pause menu if you want to come back.</p>', items: [{ label: 'Keep fighting', primary: true, action: () => this.pop() }, { label: 'Quit to menu', danger: true, action: () => this.hooks.quit() }] });
+    this.push({ title: 'Quit this run?', cls: 'confirm', html: '<p>Anything since your last save is lost. Save first from the pause menu if you want to come back.</p>', items: [{ label: 'Keep fighting', primary: true, action: () => this.pop() }, { label: 'Quit to menu', danger: true, action: () => this.hooks.quit() }] });
   }
   pedia() {
     const keys = this.store.settings.keys;
@@ -224,6 +251,18 @@ export class UI {
   pickTrick(last) {
     const ids = Object.keys(TRICKS);
     const items = ids.map((id) => ({ label: `${TRICKS[id].name}  (${T.tricks.charge[id]} kills)`, primary: id === last, action: () => this.hooks.pickedTrick(id) }));
+    if (this.hooks.layout?.mode === 'mobile') {
+      const scr = { title: 'Choose your Trick', cls: 'tricks', noBack: true, onBack: () => {},
+        html: `<div class="tcar">${ids.map((id) => `<div class="tcard" data-id="${id}"><b style="color:${TRICKS[id].color}">${TRICKS[id].name}</b><span class="tk">${T.tricks.charge[id]} kills to charge</span><p>${esc(TRICKS[id].desc)}</p><button class="pick" data-id="${id}">Take ${esc(TRICKS[id].name)}</button></div>`).join('')}</div><div class="tdots">${ids.map((id) => `<i class="${id === last ? 'on' : ''}"></i>`).join('')}</div>`,
+        items: [],
+        after: (root) => {
+          const car = root.querySelector('.tcar'), dots = [...root.querySelectorAll('.tdots i')];
+          const i0 = Math.max(0, ids.indexOf(last)); requestAnimationFrame?.(() => { car.scrollLeft = i0 * car.clientWidth; });
+          car.addEventListener('scroll', () => { const i = Math.round(car.scrollLeft / Math.max(1, car.clientWidth)); dots.forEach((d, j) => d.classList.toggle('on', j === i)); }, { passive: true });
+          root.querySelectorAll('.pick').forEach((b) => b.addEventListener('click', () => this.hooks.pickedTrick(b.dataset.id)));
+        } };
+      return this.show(scr);
+    }
     this.show({ title: 'Choose your Trick', cls: 'tricks', initial: Math.max(0, ids.indexOf(last)),
       html: `<p>An improvised trick on <kbd>X</kbd>, charged by kills. It's yours for the whole run.</p><div class="trickdesc">${ids.map((id) => `<p><b style="color:${TRICKS[id].color}">${TRICKS[id].name}</b>: ${esc(TRICKS[id].desc)}</p>`).join('')}</div>`,
       items, foot: 'W / S choose &middot; ENTER / F confirm (your last pick is remembered)', onBack: () => {}, noBack: true });
