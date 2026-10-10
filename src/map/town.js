@@ -162,7 +162,6 @@ const DECOR = [
   ['bench', 41, 30], ['bunting', 0, 0],
 ];
 
-export function zoneAtRC(c, r) { return ZGRID[r][c]; }
 
 export function buildMap() {
   const tiles = new Uint8Array(W * H).fill(OUT);

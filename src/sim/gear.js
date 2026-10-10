@@ -126,7 +126,6 @@ export const GearMixin = {
     if (hit) this.emit('padHit', {});
     return toHealth + left;
   },
-  paddingTotal() { const p = this.p; let s = 0; for (let i = 0; i < p.padLayers; i++) s += p.pad[i]; return s; },
 
   // ---------- Condition (§13) ----------
   condMult(w) { return 1 + T.condition.damage[w.cond ?? 1]; },

@@ -71,7 +71,6 @@ export const CoreMixin = {
     this.emit('itemSpawn', { x: wi.x, y: wi.y, item: wi.item });
     return wi;
   },
-  removeWorldItem(wi) { wi.done = true; },
   updateWorldItems() {
     const p = this.p;
     for (const wi of this.worldItems) {

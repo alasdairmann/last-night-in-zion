@@ -194,7 +194,6 @@ export class Game {
     };
   }
   curWeapon() { const p = this.p; if (p.downed && p.lastChance) return p.lastChance; return p.slots[p.cur]; }
-  gunSlots() { return this.hasComfort('mule') ? [1, 2, 3] : [1, 2]; }
   gunClass(id) { return PRIMARY.has(id) ? 'primary' : 'secondary'; }
   // the slot a new gun goes in: its class slot if empty, then the Pack Mule slot. null: no room, it goes to the Red Lion stash
   gunSlotFor(id) {

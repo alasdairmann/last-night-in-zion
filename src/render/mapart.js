@@ -512,7 +512,6 @@ function trapProp(ctx, t, rng) {
     case 'bell': break; // the church bell is part of St Mary's tower
   }
 }
-const RACK_NAME = (id) => id.startsWith('t:') ? THROWS[id.slice(2)].name : (MELEE[id] || GUNS[id]).name;
 const RACK_COST = (id) => id.startsWith('t:') ? THROWS[id.slice(2)].cost : (MELEE[id] || GUNS[id]).cost;
 function rack(ctx, r) {
   const R = (a, b, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(a, b, w, h); };

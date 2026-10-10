@@ -51,7 +51,6 @@ export const SafehouseMixin = {
     }
   },
   // sealed: door bolted. Windows still have to be torn down (slowly) before anything gets in.
-  pubSealed() { return this.pubShut; },
   pubBreached() { return this.safeBars.some((b) => b.planks <= 0); },
   playerInSealedPub() { return this.pubShut && this.inPub(this.p.x, this.p.y); },
   // walkers chasing Cain into a sealed pub go for the windows instead of milling at the walls

@@ -164,18 +164,6 @@ export const EscapeMixin = {
     for (const q of this.pending) { q.t -= DT; if (q.t <= 0) { q.done = true; this.spawnPending(q); } }
     if (this.pending.some((q) => q.done)) this.pending = this.pending.filter((q) => !q.done);
   },
-  escapeObjective() {
-    const E = this.escape, sp = this.map.spots;
-    if (!E.unlocked) return null;
-    const at = (s) => ({ x: s.px, y: s.py });
-    if (E.stage === 'parts') {
-      if (this.carriedItem() === 'tyre' || (this.p.jerry && E.diesel < 2)) return at(sp.engine);
-      return null;
-    }
-    if (E.stage === 'fit' || E.stage === 'stand') return at(sp.engine);
-    if (E.stage === 'drive') return at(sp.engine_cab);
-    return null;
-  },
   escapeLog() {
     const E = this.escape;
     if (!E.unlocked) return null;

@@ -651,12 +651,6 @@ export class Renderer {
     else if (cls === 'cone') { for (let a = 0; a < 5 + f; a++) for (let b = -Math.floor(a / 2); b <= Math.floor(a / 2); b++) P(a, b, a < 2 || Math.abs(b) < 1 ? core : edge); }
     else { const L = 4 + f * 2; for (let a = 0; a < L; a++) P(a, a % 3 === 2 ? (f % 2 ? 1 : -1) : 0, a < 2 ? core : edge); P(1, 1, core); P(1, -1, core); }
   }
-  weaponLine(v, x, y, ang, len, col, thick = 1) {
-    v.fillStyle = '#2b1d16';
-    for (let i = 0; i <= len; i++) v.fillRect(Math.round(x + Math.cos(ang) * i) - 1, Math.round(y + Math.sin(ang) * i) - 1, thick + 1, thick + 1);
-    v.fillStyle = col;
-    for (let i = 0; i <= len; i++) v.fillRect(Math.round(x + Math.cos(ang) * i) - (thick > 1 ? 1 : 0), Math.round(y + Math.sin(ang) * i) - (thick > 1 ? 1 : 0), thick, thick);
-  }
 
   pixelCircleOutline(v, x, y, r, c, a = 1) {
     v.fillStyle = c; v.globalAlpha = Math.max(0, a);
