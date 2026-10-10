@@ -207,6 +207,7 @@ export function buildMap() {
   for (const y of [28, 36]) { fillG(33, y, 46, y, G.PAVE); fillG(50, y, 63, y, G.PAVE); } // v1.6: the pavements stop at the kerb, not across Station Road / School Lane
   fillG(36, 34, 39, 34, G.PAVE);            // v1.6: a lay-by under the car parked off the High Street
   fillG(85, 34, 89, 40, G.GRAVEL);          // v1.6: a gravel pull-in for the tow truck, not grass
+  fillG(32, 52, 46, 54, G.TARMAC);          // v1.6: the pub car park's drive, through its gate to Station Road
 
   // buildings
   const buildings = BUILDINGS.map((b) => ({ ...b }));
